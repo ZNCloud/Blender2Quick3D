@@ -5,6 +5,7 @@ __pycache__/
 *.pyo
 *.pyd
 
+
 # PySide6 installation files
 *.dll
 *.so
@@ -33,4 +34,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+output
 

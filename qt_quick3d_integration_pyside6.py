@@ -142,9 +142,12 @@ def show_quick3d_window():
                 # 保存对app的引用，防止被垃圾回收
                 self.app = app
                 
+                # 从QML处理器获取窗口尺寸设置
+                window_width, window_height = self.get_window_size_from_settings()
+                
                 self.setWindowTitle("QML View3D Window")
                 self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-                self.resize(800, 600)
+                self.resize(window_width, window_height)
                 
                 # 创建中央部件
                 central_widget = QWidget()
@@ -228,43 +231,45 @@ def show_quick3d_window():
                     # 如果QML处理器不可用或失败，使用默认内容
                     if not qml_content:
                         print("🔧 使用默认QML内容...")
-                        qml_content = '''
+                        # 获取窗口尺寸设置
+                        window_width, window_height = self.get_window_size_from_settings()
+                        qml_content = f'''
 import QtQuick
 import QtQuick3D
 
-Window {
+Window {{
     visible: true
-    width: 1280
-    height: 720
+    width: {window_width}
+    height: {window_height}
     title: "Quick3D View - Default Content"
     
-    View3D {
+    View3D {{
         anchors.fill: parent
         
-        environment: SceneEnvironment {
+        environment: SceneEnvironment {{
             clearColor: "#303030"
             backgroundMode: SceneEnvironment.Color
-        }
+        }}
         
-        DirectionalLight {
+        DirectionalLight {{
             eulerRotation.x: -30
             eulerRotation.y: -70
             ambientColor: Qt.rgba(0.3, 0.3, 0.3, 1.0)
-        }
+        }}
 
         // 简单的立方体模型
-        Model {
+        Model {{
             source: "#Cube"
             materials: [
-                DefaultMaterial {
+                DefaultMaterial {{
                     baseColor: Qt.rgba(0.8, 0.8, 0.8, 1.0)
                     cullMode: DefaultMaterial.NoCulling
                     specularAmount: 0.5
-                }
+                }}
             ]
-        }
-    }
-}
+        }}
+    }}
+}}
 '''
                     
                     # 加载QML内容
@@ -324,7 +329,26 @@ Window {
                 
                 print("✅ QML View3D窗口创建完成")
 
-            
+            def get_window_size_from_settings(self):
+                """从QML处理器获取View3D尺寸设置（作为窗口尺寸）"""
+                try:
+                    if QML_HANDLER_AVAILABLE:
+                        # 创建QML处理器实例来获取设置
+                        handler = qml_handler.QMLHandler()
+                        settings = handler.read_scene_properties()
+                        
+                        # 使用View3D尺寸作为窗口尺寸
+                        window_width = settings.get('view3d_width', 1280)
+                        window_height = settings.get('view3d_height', 720)
+                        
+                        print(f"✅ 从QML处理器获取View3D尺寸: {window_width}x{window_height}")
+                        return window_width, window_height
+                    else:
+                        print("⚠️ QML处理器不可用，使用默认View3D尺寸")
+                        return 1280, 720
+                except Exception as e:
+                    print(f"⚠️ 获取View3D尺寸设置失败: {e}，使用默认尺寸")
+                    return 1280, 720
             
             def closeEvent(self, event):
                 """窗口关闭事件"""

@@ -63,6 +63,15 @@ except ImportError as e:
 # 添加场景属性
 def register_scene_properties():
     """注册场景属性"""
+    # Balsam转换器相关属性
+    bpy.types.Scene.work_space_path = StringProperty(
+        name="Work Space Path",
+        description="Working directory for GLTF and QML files",
+        default="",
+        subtype='DIR_PATH'
+    )
+    
+    # 保留原有属性以保持向后兼容
     bpy.types.Scene.balsam_gltf_path = StringProperty(
         name="Balsam GLTF Path",
         description="Custom GLTF file path for Balsam conversion",
@@ -76,11 +85,750 @@ def register_scene_properties():
         default="",
         subtype='DIR_PATH'
     )
+    
+    register_qt_quick3d_properties()
+
+def register_qt_quick3d_properties():
+    """注册Qt Quick3D引擎相关属性"""
+    from bpy.props import IntProperty, FloatProperty, FloatVectorProperty, BoolProperty, StringProperty
+    
+    # UI控制属性
+    bpy.types.Scene.show_scene_settings = BoolProperty(
+        name="Show Scene Settings",
+        description="Show or hide SceneSettings panel",
+        default=False
+    )
+    
+    # 窗口和View3D尺寸设置
+    register_window_properties()
+    
+    # SceneEnvironment基础属性
+    register_scene_environment_properties()
+    
+    # ExtendedSceneEnvironment高级属性
+    register_extended_scene_environment_properties()
+
+def register_window_properties():
+    """注册窗口和View3D尺寸相关属性"""
+    from bpy.props import IntProperty
+    
+    # 窗口/View3D大小设置（统一设置，因为View3D覆盖全窗口）
+    bpy.types.Scene.qtquick3d_view3d_width = IntProperty(
+        name="Width",
+        description="Width of the window and View3D area",
+        default=1280,
+        min=400,
+        max=3840
+    )
+    
+    bpy.types.Scene.qtquick3d_view3d_height = IntProperty(
+        name="Height",
+        description="Height of the window and View3D area", 
+        default=720,
+        min=300,
+        max=2160
+    )
+
+def register_scene_environment_properties():
+    """注册SceneEnvironment基础属性"""
+    from bpy.props import IntProperty, FloatProperty, FloatVectorProperty, BoolProperty, StringProperty
+    
+    # 抗锯齿设置
+    bpy.types.Scene.qtquick3d_antialiasing_mode = IntProperty(
+        name="Antialiasing Mode",
+        description="Qt Quick3D antialiasing mode",
+        default=0,
+        min=0,
+        max=3
+    )
+    
+    bpy.types.Scene.qtquick3d_antialiasing_quality = IntProperty(
+        name="Antialiasing Quality",
+        description="Qt Quick3D antialiasing quality",
+        default=2,
+        min=0,
+        max=3
+    )
+    
+    # 环境光遮蔽
+    bpy.types.Scene.qtquick3d_ao_enabled = BoolProperty(
+        name="AO Enabled",
+        description="Enable ambient occlusion",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_ao_strength = FloatProperty(
+        name="AO Strength",
+        description="Ambient occlusion strength",
+        default=1.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    # 背景和清除颜色
+    bpy.types.Scene.qtquick3d_background_mode = IntProperty(
+        name="Background Mode",
+        description="Background mode",
+        default=0,
+        min=0,
+        max=3
+    )
+    
+    bpy.types.Scene.qtquick3d_clear_color = FloatVectorProperty(
+        name="Clear Color",
+        description="Clear color",
+        default=(0.0, 0.0, 0.0, 1.0),
+        size=4,
+        subtype='COLOR'
+    )
+    
+    # 深度测试
+    bpy.types.Scene.qtquick3d_depth_test_enabled = BoolProperty(
+        name="Depth Test",
+        description="Enable depth test",
+        default=True
+    )
+    
+    # 环境光遮蔽详细设置
+    bpy.types.Scene.qtquick3d_ao_bias = FloatProperty(
+        name="AO Bias",
+        description="Ambient occlusion bias",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_ao_distance = FloatProperty(
+        name="AO Distance",
+        description="Ambient occlusion distance",
+        default=5.0,
+        min=0.1,
+        max=100.0
+    )
+    
+    bpy.types.Scene.qtquick3d_ao_dither = BoolProperty(
+        name="AO Dither",
+        description="Enable ambient occlusion dithering",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_ao_sample_rate = IntProperty(
+        name="AO Sample Rate",
+        description="Ambient occlusion sample rate",
+        default=2,
+        min=1,
+        max=8
+    )
+    
+    bpy.types.Scene.qtquick3d_ao_softness = FloatProperty(
+        name="AO Softness",
+        description="Ambient occlusion softness",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    # 深度设置
+    bpy.types.Scene.qtquick3d_depth_prepass_enabled = BoolProperty(
+        name="Depth PrePass",
+        description="Enable depth prepass",
+        default=False
+    )
+    
+    # 环境探针
+    bpy.types.Scene.qtquick3d_probe_exposure = FloatProperty(
+        name="Probe Exposure",
+        description="Environment probe exposure",
+        default=0.0,
+        min=-5.0,
+        max=5.0
+    )
+    
+    bpy.types.Scene.qtquick3d_probe_horizon = FloatProperty(
+        name="Probe Horizon",
+        description="Environment probe horizon",
+        default=0.0,
+        min=-1.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_probe_orientation = FloatVectorProperty(
+        name="Probe Orientation",
+        description="Environment probe orientation",
+        default=(0.0, 0.0, 0.0),
+        size=3
+    )
+    
+    # 天空盒设置
+    bpy.types.Scene.qtquick3d_skybox_cubemap = StringProperty(
+        name="SkyBox CubeMap",
+        description="Skybox cubemap texture",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_skybox_blur_amount = FloatProperty(
+        name="SkyBox Blur Amount",
+        description="Skybox blur amount",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    # 抗锯齿高级设置
+    bpy.types.Scene.qtquick3d_specular_aa_enabled = BoolProperty(
+        name="Specular AA",
+        description="Enable specular anti-aliasing",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_temporal_aa_enabled = BoolProperty(
+        name="Temporal AA",
+        description="Enable temporal anti-aliasing",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_temporal_aa_strength = FloatProperty(
+        name="Temporal AA Strength",
+        description="Temporal anti-aliasing strength",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    # 色调映射
+    bpy.types.Scene.qtquick3d_tonemap_mode = IntProperty(
+        name="Tonemap Mode",
+        description="Tone mapping mode",
+        default=0,
+        min=0,
+        max=3
+    )
+    
+    # 其他设置
+    bpy.types.Scene.qtquick3d_oit_method = IntProperty(
+        name="OIT Method",
+        description="Order independent transparency method",
+        default=0,
+        min=0,
+        max=2
+    )
+    
+    bpy.types.Scene.qtquick3d_light_probe = StringProperty(
+        name="Light Probe",
+        description="Light probe texture",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_lightmapper = IntProperty(
+        name="Lightmapper",
+        description="Lightmapper type",
+        default=0,
+        min=0,
+        max=2
+    )
+    
+    bpy.types.Scene.qtquick3d_scissor_rect = FloatVectorProperty(
+        name="Scissor Rect",
+        description="Scissor rectangle (x, y, width, height) - x,y是左上角坐标，width,height是View3D分辨率",
+        default=(0.0, 0.0, 1280.0, 720.0),
+        size=4
+    )
+    
+    bpy.types.Scene.qtquick3d_fog = StringProperty(
+        name="Fog",
+        description="Fog settings",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_debug_settings = StringProperty(
+        name="Debug Settings",
+        description="Debug settings",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_effects = StringProperty(
+        name="Effects",
+        description="Effects settings",
+        default="",
+        subtype='FILE_PATH'
+    )
+
+def register_extended_scene_environment_properties():
+    """注册ExtendedSceneEnvironment高级属性"""
+    from bpy.props import IntProperty, FloatProperty, FloatVectorProperty, BoolProperty, StringProperty
+    
+    # 扩展环境开关
+    bpy.types.Scene.qtquick3d_use_extended_environment = BoolProperty(
+        name="Use Extended Environment",
+        description="Enable extended scene environment settings",
+        default=False
+    )
+    
+    # 颜色调整
+    bpy.types.Scene.qtquick3d_brightness = FloatProperty(
+        name="Brightness",
+        description="Brightness adjustment",
+        default=0.0,
+        min=-1.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_contrast = FloatProperty(
+        name="Contrast",
+        description="Contrast adjustment", 
+        default=0.0,
+        min=-1.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_saturation = FloatProperty(
+        name="Saturation",
+        description="Saturation adjustment",
+        default=0.0,
+        min=-1.0,
+        max=1.0
+    )
+    
+    # 曝光和锐化
+    bpy.types.Scene.qtquick3d_exposure = FloatProperty(
+        name="Exposure",
+        description="Exposure value",
+        default=0.0,
+        min=-5.0,
+        max=5.0
+    )
+    
+    bpy.types.Scene.qtquick3d_sharpness = FloatProperty(
+        name="Sharpness",
+        description="Sharpness amount",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    # 景深效果
+    bpy.types.Scene.qtquick3d_dof_enabled = BoolProperty(
+        name="Enable Depth of Field",
+        description="Enable depth of field effect",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_dof_blur_amount = FloatProperty(
+        name="DOF Blur Amount",
+        description="Depth of field blur amount",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    # 发光效果
+    bpy.types.Scene.qtquick3d_glow_enabled = BoolProperty(
+        name="Enable Glow",
+        description="Enable glow effect",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_intensity = FloatProperty(
+        name="Glow Intensity",
+        description="Glow intensity",
+        default=0.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    # 镜头光晕
+    bpy.types.Scene.qtquick3d_lens_flare_enabled = BoolProperty(
+        name="Enable Lens Flare",
+        description="Enable lens flare effect",
+        default=False
+    )
+    
+    # 颜色调整开关
+    bpy.types.Scene.qtquick3d_color_adjustments_enabled = BoolProperty(
+        name="Enable Color Adjustments",
+        description="Enable color adjustments",
+        default=False
+    )
+    
+    # 景深详细设置
+    bpy.types.Scene.qtquick3d_dof_focus_distance = FloatProperty(
+        name="DOF Focus Distance",
+        description="Depth of field focus distance",
+        default=100.0,
+        min=0.1,
+        max=1000.0
+    )
+    
+    bpy.types.Scene.qtquick3d_dof_focus_range = FloatProperty(
+        name="DOF Focus Range",
+        description="Depth of field focus range",
+        default=10.0,
+        min=0.1,
+        max=100.0
+    )
+    
+    # 抖动设置
+    bpy.types.Scene.qtquick3d_dithering_enabled = BoolProperty(
+        name="Enable Dithering",
+        description="Enable dithering",
+        default=False
+    )
+    
+    # FXAA设置
+    bpy.types.Scene.qtquick3d_fxaa_enabled = BoolProperty(
+        name="Enable FXAA",
+        description="Enable FXAA anti-aliasing",
+        default=False
+    )
+    
+    # 发光详细设置
+    bpy.types.Scene.qtquick3d_glow_blend_mode = IntProperty(
+        name="Glow Blend Mode",
+        description="Glow blend mode",
+        default=0,
+        min=0,
+        max=3
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_bloom = FloatProperty(
+        name="Glow Bloom",
+        description="Glow bloom amount",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_hdr_maximum_value = FloatProperty(
+        name="Glow HDR Max",
+        description="Glow HDR maximum value",
+        default=1.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_hdr_minimum_value = FloatProperty(
+        name="Glow HDR Min",
+        description="Glow HDR minimum value",
+        default=0.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_hdr_scale = FloatProperty(
+        name="Glow HDR Scale",
+        description="Glow HDR scale",
+        default=1.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_level = IntProperty(
+        name="Glow Level",
+        description="Glow level",
+        default=0,
+        min=0,
+        max=10
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_quality_high = BoolProperty(
+        name="High Quality Glow",
+        description="Enable high quality glow",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_strength = FloatProperty(
+        name="Glow Strength",
+        description="Glow strength",
+        default=0.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    bpy.types.Scene.qtquick3d_glow_use_bicubic_upscale = BoolProperty(
+        name="Bicubic Upscale",
+        description="Use bicubic upscaling for glow",
+        default=False
+    )
+    
+    # 镜头光晕详细设置
+    bpy.types.Scene.qtquick3d_lens_flare_apply_dirt_texture = BoolProperty(
+        name="Apply Dirt Texture",
+        description="Apply dirt texture to lens flare",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_apply_starburst_texture = BoolProperty(
+        name="Apply Starburst Texture",
+        description="Apply starburst texture to lens flare",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_bloom_bias = FloatProperty(
+        name="Bloom Bias",
+        description="Lens flare bloom bias",
+        default=0.0,
+        min=-1.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_bloom_scale = FloatProperty(
+        name="Bloom Scale",
+        description="Lens flare bloom scale",
+        default=1.0,
+        min=0.0,
+        max=10.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_blur_amount = FloatProperty(
+        name="Blur Amount",
+        description="Lens flare blur amount",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_camera_direction = FloatVectorProperty(
+        name="Camera Direction",
+        description="Lens flare camera direction",
+        default=(0.0, 0.0, 1.0),
+        size=3
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_distortion = FloatProperty(
+        name="Distortion",
+        description="Lens flare distortion",
+        default=0.0,
+        min=-1.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_ghost_count = IntProperty(
+        name="Ghost Count",
+        description="Number of lens flare ghosts",
+        default=4,
+        min=0,
+        max=20
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_ghost_dispersal = FloatProperty(
+        name="Ghost Dispersal",
+        description="Lens flare ghost dispersal",
+        default=0.3,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_halo_width = FloatProperty(
+        name="Halo Width",
+        description="Lens flare halo width",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_lens_color_texture = StringProperty(
+        name="Color Texture",
+        description="Lens flare color texture",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_lens_dirt_texture = StringProperty(
+        name="Dirt Texture",
+        description="Lens flare dirt texture",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_lens_starburst_texture = StringProperty(
+        name="Starburst Texture",
+        description="Lens flare starburst texture",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qtquick3d_lens_flare_stretch_to_aspect = FloatProperty(
+        name="Stretch To Aspect",
+        description="Stretch lens flare to aspect ratio",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    # LUT设置
+    bpy.types.Scene.qtquick3d_lut_enabled = BoolProperty(
+        name="Enable LUT",
+        description="Enable LUT (Look-Up Table)",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_lut_filter_alpha = FloatProperty(
+        name="LUT Filter Alpha",
+        description="LUT filter alpha value",
+        default=1.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lut_size = FloatProperty(
+        name="LUT Size",
+        description="LUT size",
+        default=32.0,
+        min=16.0,
+        max=64.0
+    )
+    
+    bpy.types.Scene.qtquick3d_lut_texture = StringProperty(
+        name="LUT Texture",
+        description="Path to LUT texture file",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    # 白点设置
+    bpy.types.Scene.qtquick3d_white_point = FloatProperty(
+        name="White Point",
+        description="White point value",
+        default=1.0,
+        min=0.1,
+        max=10.0
+    )
+    
+    # 暗角详细设置
+    bpy.types.Scene.qtquick3d_vignette_enabled = BoolProperty(
+        name="Enable Vignette",
+        description="Enable vignette effect",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_vignette_strength = FloatProperty(
+        name="Vignette Strength",
+        description="Vignette strength",
+        default=0.0,
+        min=0.0,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_vignette_color = FloatVectorProperty(
+        name="Vignette Color",
+        description="Vignette color",
+        default=(0.0, 0.0, 0.0, 1.0),
+        size=4,
+        subtype='COLOR'
+    )
+    
+    bpy.types.Scene.qtquick3d_vignette_radius = FloatProperty(
+        name="Vignette Radius",
+        description="Vignette radius",
+        default=0.5,
+        min=0.0,
+        max=1.0
+    )
+
 
 def unregister_scene_properties():
     """注销场景属性"""
+    # Balsam转换器相关属性
+    del bpy.types.Scene.work_space_path
     del bpy.types.Scene.balsam_gltf_path
     del bpy.types.Scene.balsam_output_dir
+    
+    # 注销Qt Quick3D引擎属性
+    unregister_qt_quick3d_properties()
+
+def unregister_qt_quick3d_properties():
+    """注销Qt Quick3D引擎相关属性"""
+    # UI控制属性
+    del bpy.types.Scene.show_scene_settings
+    
+    # 窗口/View3D尺寸设置（统一设置）
+    del bpy.types.Scene.qtquick3d_view3d_width
+    del bpy.types.Scene.qtquick3d_view3d_height
+    
+    # SceneEnvironment基础属性
+    del bpy.types.Scene.qtquick3d_antialiasing_mode
+    del bpy.types.Scene.qtquick3d_antialiasing_quality
+    del bpy.types.Scene.qtquick3d_ao_enabled
+    del bpy.types.Scene.qtquick3d_ao_strength
+    del bpy.types.Scene.qtquick3d_ao_bias
+    del bpy.types.Scene.qtquick3d_ao_distance
+    del bpy.types.Scene.qtquick3d_ao_dither
+    del bpy.types.Scene.qtquick3d_ao_sample_rate
+    del bpy.types.Scene.qtquick3d_ao_softness
+    del bpy.types.Scene.qtquick3d_background_mode
+    del bpy.types.Scene.qtquick3d_clear_color
+    del bpy.types.Scene.qtquick3d_depth_test_enabled
+    del bpy.types.Scene.qtquick3d_depth_prepass_enabled
+    del bpy.types.Scene.qtquick3d_probe_exposure
+    del bpy.types.Scene.qtquick3d_probe_horizon
+    del bpy.types.Scene.qtquick3d_probe_orientation
+    del bpy.types.Scene.qtquick3d_skybox_cubemap
+    del bpy.types.Scene.qtquick3d_skybox_blur_amount
+    del bpy.types.Scene.qtquick3d_specular_aa_enabled
+    del bpy.types.Scene.qtquick3d_temporal_aa_enabled
+    del bpy.types.Scene.qtquick3d_temporal_aa_strength
+    del bpy.types.Scene.qtquick3d_tonemap_mode
+    del bpy.types.Scene.qtquick3d_oit_method
+    del bpy.types.Scene.qtquick3d_light_probe
+    del bpy.types.Scene.qtquick3d_lightmapper
+    del bpy.types.Scene.qtquick3d_scissor_rect
+    del bpy.types.Scene.qtquick3d_fog
+    del bpy.types.Scene.qtquick3d_debug_settings
+    del bpy.types.Scene.qtquick3d_effects
+    
+    # ExtendedSceneEnvironment高级属性
+    del bpy.types.Scene.qtquick3d_use_extended_environment
+    del bpy.types.Scene.qtquick3d_brightness
+    del bpy.types.Scene.qtquick3d_contrast
+    del bpy.types.Scene.qtquick3d_saturation
+    del bpy.types.Scene.qtquick3d_color_adjustments_enabled
+    del bpy.types.Scene.qtquick3d_exposure
+    del bpy.types.Scene.qtquick3d_sharpness
+    del bpy.types.Scene.qtquick3d_white_point
+    del bpy.types.Scene.qtquick3d_dof_enabled
+    del bpy.types.Scene.qtquick3d_dof_blur_amount
+    del bpy.types.Scene.qtquick3d_dof_focus_distance
+    del bpy.types.Scene.qtquick3d_dof_focus_range
+    del bpy.types.Scene.qtquick3d_dithering_enabled
+    del bpy.types.Scene.qtquick3d_fxaa_enabled
+    del bpy.types.Scene.qtquick3d_glow_enabled
+    del bpy.types.Scene.qtquick3d_glow_intensity
+    del bpy.types.Scene.qtquick3d_glow_blend_mode
+    del bpy.types.Scene.qtquick3d_glow_bloom
+    del bpy.types.Scene.qtquick3d_glow_hdr_maximum_value
+    del bpy.types.Scene.qtquick3d_glow_hdr_minimum_value
+    del bpy.types.Scene.qtquick3d_glow_hdr_scale
+    del bpy.types.Scene.qtquick3d_glow_level
+    del bpy.types.Scene.qtquick3d_glow_quality_high
+    del bpy.types.Scene.qtquick3d_glow_strength
+    del bpy.types.Scene.qtquick3d_glow_use_bicubic_upscale
+    del bpy.types.Scene.qtquick3d_lens_flare_enabled
+    del bpy.types.Scene.qtquick3d_lens_flare_apply_dirt_texture
+    del bpy.types.Scene.qtquick3d_lens_flare_apply_starburst_texture
+    del bpy.types.Scene.qtquick3d_lens_flare_bloom_bias
+    del bpy.types.Scene.qtquick3d_lens_flare_bloom_scale
+    del bpy.types.Scene.qtquick3d_lens_flare_blur_amount
+    del bpy.types.Scene.qtquick3d_lens_flare_camera_direction
+    del bpy.types.Scene.qtquick3d_lens_flare_distortion
+    del bpy.types.Scene.qtquick3d_lens_flare_ghost_count
+    del bpy.types.Scene.qtquick3d_lens_flare_ghost_dispersal
+    del bpy.types.Scene.qtquick3d_lens_flare_halo_width
+    del bpy.types.Scene.qtquick3d_lens_flare_lens_color_texture
+    del bpy.types.Scene.qtquick3d_lens_flare_lens_dirt_texture
+    del bpy.types.Scene.qtquick3d_lens_flare_lens_starburst_texture
+    del bpy.types.Scene.qtquick3d_lens_flare_stretch_to_aspect
+    del bpy.types.Scene.qtquick3d_lut_enabled
+    del bpy.types.Scene.qtquick3d_lut_filter_alpha
+    del bpy.types.Scene.qtquick3d_lut_size
+    del bpy.types.Scene.qtquick3d_lut_texture
+    del bpy.types.Scene.qtquick3d_vignette_enabled
+    del bpy.types.Scene.qtquick3d_vignette_color
+    del bpy.types.Scene.qtquick3d_vignette_radius
+    del bpy.types.Scene.qtquick3d_vignette_strength
 
 # 安装 PySide6 操作符
 class InstallPySide6Operator(bpy.types.Operator):
@@ -265,42 +1013,210 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         layout.operator("qt_quick3d.open_window", text="Open Quick3D Window")
         
         # 添加渲染引擎选择
-        layout.separator()
-        layout.label(text="Render Engine:")
-        layout.operator("qt_quick3d.set_render_engine", text="Set as Render Engine")
+        # layout.separator()
+        # layout.label(text="Render Engine:")
+        # layout.operator("qt_quick3d.set_render_engine", text="Set as Render Engine")
         
         # QML转换功能
         layout.separator()
         layout.label(text="QML Export:")
         layout.operator(
-            "qt_quick3d.convert_gltf_to_qml",
+            "qt_quick3d.balsam_convert_scene",
             text="Convert Scene to QML"
         )
+        #设置导出路径
+        # 设置工作空间路径
+        layout.separator()
+        layout.label(text="Work Space Settings:")
+
+        row = layout.row()
+        row.operator("qt_quick3d.balsam_set_work_space", text="Set Work Space")
+
+        # 显示和编辑当前工作空间路径
+        scene = context.scene
+
+        # Work Space Path 输入栏
+        layout.prop(scene, "work_space_path", text="Work Space")
+
+        # 兼容性提示（如果属性未设置，显示默认信息）
+        work_space = getattr(scene, "work_space_path", None)
+        if not work_space:
+            layout.label(text="Work Space: (default)")
+        else:
+            layout.label(text=f"Work Space: {work_space}")
+
+        # 提供调用balsam转换和写入的按钮
+        layout.separator()
+        layout.label(text="Balsam Conversion:")
+        # INSERT_YOUR_CODE
+        # 添加balsam版本选择下拉框
+        layout.separator()
+        layout.label(text="Balsam Version:")
+
+        # 确保场景有balsam_version属性，否则显示默认
+        if not hasattr(scene, "balsam_version"):
+            # 兼容性处理：如果属性不存在，显示提示
+            layout.label(text="(Scene property 'balsam_version' not found)")
+        else:
+            # 下拉框，允许用户选择balsam版本
+            layout.prop(scene, "balsam_version", text="Select Version")
+
+        row = layout.row()
+        row.operator("qt_quick3d.balsam_convert_existing", text="Convert Existing GLTF")
         
+        #SceneSettings，用于设置弹出的窗口大小，view3d大小，sceneEnvironment设置
+        # INSERT_YOUR_CODE
+
+        # SceneSettings 折叠框
+        scene_settings_box = layout.box()
+        scene_settings_box.prop(scene, "show_scene_settings", icon="TRIA_DOWN" if getattr(scene, "show_scene_settings", False) else "TRIA_RIGHT", emboss=False, text="SceneSettings")
+
+        if getattr(scene, "show_scene_settings", False):
+            # 窗口/View3D 大小设置（统一设置，因为View3D覆盖全窗口）
+            scene_settings_box.label(text="Size:")
+            row = scene_settings_box.row(align=True)
+            row.prop(scene, "qtquick3d_view3d_width", text="Width")
+            row.prop(scene, "qtquick3d_view3d_height", text="Height")
+
+            # SceneEnvironment 设置
+            scene_settings_box.label(text="SceneEnvironment:")
+            
+            # 基础SceneEnvironment设置
+            basic_box = scene_settings_box.box()
+            basic_box.label(text="Basic Settings:")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_antialiasing_mode", text="AA Mode")
+            row.prop(scene, "qtquick3d_antialiasing_quality", text="AA Quality")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_ao_enabled", text="AO Enabled")
+            row.prop(scene, "qtquick3d_ao_strength", text="AO Strength")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_ao_sample_rate", text="AO Sample Rate")
+            row.prop(scene, "qtquick3d_ao_distance", text="AO Distance")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_background_mode", text="Background Mode")
+            row.prop(scene, "qtquick3d_clear_color", text="Clear Color")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_depth_test_enabled", text="Depth Test")
+            row.prop(scene, "qtquick3d_depth_prepass_enabled", text="Depth PrePass")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_probe_exposure", text="Probe Exposure")
+            row.prop(scene, "qtquick3d_probe_horizon", text="Probe Horizon")
+            row = basic_box.row(align=True)
+            row.prop(scene, "qtquick3d_tonemap_mode", text="Tonemap Mode")
+            row.prop(scene, "qtquick3d_oit_method", text="OIT Method")
+            
+            # 添加 ExtendedSceneEnvironment 复选框
+            row = scene_settings_box.row()
+            row.prop(scene, "qtquick3d_use_extended_environment", text="Use ExtendedSceneEnvironment")
+
+            if getattr(scene, "qtquick3d_use_extended_environment", False):
+                extended_box = scene_settings_box.box()
+                extended_box.label(text="Extended Environment Settings:")
+
+                # 颜色调整
+                color_box = extended_box.box()
+                color_box.label(text="Color Adjustments:")
+                row = color_box.row(align=True)
+                row.prop(scene, "qtquick3d_color_adjustments_enabled", text="Enable Color Adjustments")
+                row = color_box.row(align=True)
+                row.prop(scene, "qtquick3d_brightness", text="Brightness")
+                row.prop(scene, "qtquick3d_contrast", text="Contrast")
+                row.prop(scene, "qtquick3d_saturation", text="Saturation")
+                
+                # 曝光和锐化
+                exposure_box = extended_box.box()
+                exposure_box.label(text="Exposure & Sharpness:")
+                row = exposure_box.row(align=True)
+                row.prop(scene, "qtquick3d_exposure", text="Exposure")
+                row.prop(scene, "qtquick3d_sharpness", text="Sharpness")
+                row.prop(scene, "qtquick3d_white_point", text="White Point")
+                
+                # 景深效果
+                dof_box = extended_box.box()
+                dof_box.label(text="Depth of Field:")
+                row = dof_box.row(align=True)
+                row.prop(scene, "qtquick3d_dof_enabled", text="Enable DOF")
+                row.prop(scene, "qtquick3d_dof_blur_amount", text="Blur Amount")
+                row = dof_box.row(align=True)
+                row.prop(scene, "qtquick3d_dof_focus_distance", text="Focus Distance")
+                row.prop(scene, "qtquick3d_dof_focus_range", text="Focus Range")
+                
+                # 发光效果
+                glow_box = extended_box.box()
+                glow_box.label(text="Glow Effect:")
+                row = glow_box.row(align=True)
+                row.prop(scene, "qtquick3d_glow_enabled", text="Enable Glow")
+                row.prop(scene, "qtquick3d_glow_intensity", text="Intensity")
+                row = glow_box.row(align=True)
+                row.prop(scene, "qtquick3d_glow_strength", text="Strength")
+                row.prop(scene, "qtquick3d_glow_bloom", text="Bloom")
+                row = glow_box.row(align=True)
+                row.prop(scene, "qtquick3d_glow_quality_high", text="High Quality")
+                row.prop(scene, "qtquick3d_glow_use_bicubic_upscale", text="Bicubic Upscale")
+                
+                # 镜头光晕
+                lens_box = extended_box.box()
+                lens_box.label(text="Lens Flare:")
+                row = lens_box.row(align=True)
+                row.prop(scene, "qtquick3d_lens_flare_enabled", text="Enable Lens Flare")
+                row.prop(scene, "qtquick3d_lens_flare_ghost_count", text="Ghost Count")
+                row = lens_box.row(align=True)
+                row.prop(scene, "qtquick3d_lens_flare_ghost_dispersal", text="Ghost Dispersal")
+                row.prop(scene, "qtquick3d_lens_flare_blur_amount", text="Blur Amount")
+                
+                # LUT设置
+                lut_box = extended_box.box()
+                lut_box.label(text="LUT Settings:")
+                row = lut_box.row(align=True)
+                row.prop(scene, "qtquick3d_lut_enabled", text="Enable LUT")
+                row.prop(scene, "qtquick3d_lut_size", text="LUT Size")
+                row = lut_box.row(align=True)
+                row.prop(scene, "qtquick3d_lut_filter_alpha", text="Filter Alpha")
+                row.prop(scene, "qtquick3d_lut_texture", text="LUT Texture")
+                
+                # 暗角效果
+                vignette_box = extended_box.box()
+                vignette_box.label(text="Vignette:")
+                row = vignette_box.row(align=True)
+                row.prop(scene, "qtquick3d_vignette_enabled", text="Enable Vignette")
+                row.prop(scene, "qtquick3d_vignette_strength", text="Strength")
+                row = vignette_box.row(align=True)
+                row.prop(scene, "qtquick3d_vignette_radius", text="Radius")
+                row.prop(scene, "qtquick3d_vignette_color", text="Color")
+                
+                # 其他效果
+                other_box = extended_box.box()
+                other_box.label(text="Other Effects:")
+                row = other_box.row(align=True)
+                row.prop(scene, "qtquick3d_dithering_enabled", text="Dithering")
+                row.prop(scene, "qtquick3d_fxaa_enabled", text="FXAA")
+
+
         # 显示一些状态信息
         layout.separator()
         layout.label(text="Status: Ready")
         layout.label(text="Qt Version: 6.9")
-        layout.label(text="Quick3D: Available")
+        layout.label(text="Quick3D: Available") #TODO尚需检测环境
         
         # 显示场景信息
         # 注意：qt_quick3d_engine 已被移除，场景信息功能已集成到 qt_quick3d_integration_pyside6 中
         
         # 检查是否需要重启
-        try:
-            addon_prefs = context.preferences.addons.get(__name__)
-            if addon_prefs and addon_prefs.preferences.restart_needed:
-                layout.separator()
-                box = layout.box()
-                box.label(text="⚠️ Restart Required")
-                box.label(text="PySide6 was just installed. Please restart Blender.")
-                box.operator("qt_quick3d.restart_blender", text="Restart Blender Now")
-        except:
-            pass
+        # try:
+        #     addon_prefs = context.preferences.addons.get(__name__)
+        #     if addon_prefs and addon_prefs.preferences.restart_needed:
+        #         layout.separator()
+        #         box = layout.box()
+        #         box.label(text="⚠️ Restart Required")
+        #         box.label(text="PySide6 was just installed. Please restart Blender.")
+        #         box.operator("qt_quick3d.restart_blender", text="Restart Blender Now")
+        # except:
+        #     pass
         
         # 添加重启按钮（用于刷新模块状态）
-        layout.separator()
-        layout.operator("qt_quick3d.restart_blender", text="Restart Blender")
+        # layout.separator()
+        # layout.operator("qt_quick3d.restart_blender", text="Restart Blender")
 
 class QT_QUICK3D_OT_open_window(Operator):
     """Open Qt6.9 Quick3D Window"""
@@ -341,38 +1257,6 @@ class QT_QUICK3D_OT_set_render_engine(Operator):
 
 
 
-class QT_QUICK3D_OT_convert_gltf_to_qml(Operator):
-    """Convert current scene to QML using GLTF converter"""
-    bl_idname = "qt_quick3d.convert_gltf_to_qml"
-    bl_label = "Convert Scene to QML (GLTF)"
-    bl_description = "Export scene to GLTF and convert to QML files"
-    
-    def execute(self, context):
-        try:
-            # 尝试导入转换器
-            try:
-                from . import balsam_gltf_converter
-                converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
-                
-                # 执行转换
-                success = converter.convert(keep_files=True, copy_to_docs=False)
-                
-                if success:
-                    self.report({'INFO'}, "Scene converted to QML using Balsam successfully!")
-                    print("Scene path: ", converter.get_output_paths()['base_dir'])
-                else:
-                    self.report({'ERROR'}, "Balsam conversion failed")
-                    
-            except ImportError:
-                self.report({'ERROR'}, "Balsam GLTF converter module not found")
-            except Exception as e:
-                self.report({'ERROR'}, f"Conversion failed: {str(e)}")
-                
-        except Exception as e:
-            self.report({'ERROR'}, f"Operation failed: {str(e)}")
-        
-        return {'FINISHED'}
-
 # Balsam转换器操作符
 class QT_QUICK3D_OT_balsam_convert_scene(Operator):
     """Convert current scene to QML using Balsam converter"""
@@ -399,30 +1283,7 @@ class QT_QUICK3D_OT_balsam_convert_scene(Operator):
         
         return {'FINISHED'}
 
-class QT_QUICK3D_OT_balsam_convert_and_copy(Operator):
-    """Convert and copy to documents"""
-    bl_idname = "qt_quick3d.balsam_convert_and_copy"
-    bl_label = "Convert & Copy to Docs"
-    bl_description = "Convert scene to QML and copy to documents directory"
-    
-    def execute(self, context):
-        try:
-            from . import balsam_gltf_converter
-            converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
-            
-            success = converter.convert(keep_files=True, copy_to_docs=True)
-            
-            if success:
-                self.report({'INFO'}, "Conversion and copy successful!")
-                paths = converter.get_output_paths()
-                self.report({'INFO'}, f"Output directory: {paths['base_dir']}")
-            else:
-                self.report({'ERROR'}, "Conversion and copy failed")
-                
-        except Exception as e:
-            self.report({'ERROR'}, f"Operation failed: {str(e)}")
-        
-        return {'FINISHED'}
+
 
 class QT_QUICK3D_OT_balsam_open_output(Operator):
     """Open output folder"""
@@ -507,6 +1368,43 @@ class QT_QUICK3D_OT_balsam_cleanup(Operator):
                 
         except Exception as e:
             self.report({'ERROR'}, f"Cleanup failed: {str(e)}")
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_balsam_set_work_space(Operator):
+    """Set work space directory for GLTF and QML files"""
+    bl_idname = "qt_quick3d.balsam_set_work_space"
+    bl_label = "Set Work Space"
+    bl_description = "Set working directory for GLTF and QML files"
+    
+    directory: StringProperty(
+        name="Work Space Directory",
+        description="Directory for GLTF and QML files",
+        default="",
+        subtype='DIR_PATH'
+    )
+    
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+    
+    def execute(self, context):
+        try:
+            from . import balsam_gltf_converter
+            converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
+            
+            # 设置工作空间路径
+            if converter.set_custom_output_dir(self.directory):
+                self.report({'INFO'}, f"Work space set to: {self.directory}")
+                # 保存到场景属性中
+                context.scene.work_space_path = self.directory
+                # 同时更新旧的属性以保持兼容性
+                context.scene.balsam_output_dir = self.directory
+            else:
+                self.report({'ERROR'}, "Failed to set work space")
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to set work space: {str(e)}")
         
         return {'FINISHED'}
 
@@ -696,9 +1594,14 @@ class QT_QUICK3D_OT_open_quick_window(Operator):
                 def __init__(self):
                     super().__init__()
                     
+                    # 从场景设置获取窗口尺寸
+                    scene = bpy.context.scene
+                    window_width = getattr(scene, 'qtquick3d_view3d_width', 1280)
+                    window_height = getattr(scene, 'qtquick3d_view3d_height', 720)
+                    
                     self.setWindowTitle("Quick3D Window")
                     self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-                    self.resize(1280, 720)
+                    self.resize(window_width, window_height)
                     
                     # 创建中央部件
                     central_widget = QWidget()
@@ -962,15 +1865,12 @@ class RENDER_PT_qt_quick3d_qml(Panel):
         box = layout.box()
         box.label(text="Balsam Converter", icon='EXPORT')
         
-        # 目录设置
+        # 工作空间设置
         box = layout.box()
-        box.label(text="Directory Settings")
+        box.label(text="Work Space Settings")
         
         row = box.row()
-        row.operator("qt_quick3d.balsam_set_gltf_path", text="Set GLTF Path")
-        
-        row = box.row()
-        row.operator("qt_quick3d.balsam_set_output_dir", text="Set Output Directory")
+        row.operator("qt_quick3d.balsam_set_work_space", text="Set Work Space")
         
         # 转换操作
         box = layout.box()
@@ -982,8 +1882,7 @@ class RENDER_PT_qt_quick3d_qml(Panel):
         row = box.row()
         row.operator("qt_quick3d.balsam_convert_existing", text="Convert Existing GLTF")
         
-        row = box.row()
-        row.operator("qt_quick3d.balsam_convert_and_copy", text="Convert & Copy to Docs")
+
         
         # 文件访问
         box = layout.box()
@@ -1022,11 +1921,10 @@ classes = [
     RENDER_PT_qt_quick3d_qml,
     QT_QUICK3D_OT_open_window,
     QT_QUICK3D_OT_set_render_engine,
-    QT_QUICK3D_OT_convert_gltf_to_qml,
     # Balsam转换器操作符
     QT_QUICK3D_OT_balsam_convert_scene,
-    QT_QUICK3D_OT_balsam_convert_and_copy,
     QT_QUICK3D_OT_balsam_convert_existing,
+    QT_QUICK3D_OT_balsam_set_work_space,
     QT_QUICK3D_OT_balsam_set_gltf_path,
     QT_QUICK3D_OT_balsam_set_output_dir,
     QT_QUICK3D_OT_balsam_open_output,
