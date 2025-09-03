@@ -164,10 +164,25 @@ def show_quick3d_window():
                     # 创建QML引擎
                     self.qml_engine = QQmlApplicationEngine()
                     
-                                     # 添加QML导入路径，使用Balsam转换器的全局路径
+                                     # 添加QML导入路径，优先使用工作空间路径
                     if BALSAM_AVAILABLE:
                         try:
-                            qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                            # 优先使用工作空间路径
+                            qml_output_dir = None
+                            try:
+                                import bpy
+                                scene = bpy.context.scene
+                                work_space = getattr(scene, 'work_space_path', None)
+                                if work_space:
+                                    qml_output_dir = work_space
+                                    print(f"✅ 使用工作空间路径: {qml_output_dir}")
+                            except:
+                                pass
+                            
+                            # 回退到默认路径
+                            if not qml_output_dir:
+                                qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                            
                             # 尝试使用BASE_DIR作为base URL
                             base_dir = getattr(balsam_gltf_converter, 'BASE_DIR', None)
                             
@@ -280,7 +295,21 @@ Window {{
                     # 添加路径调试信息
                     if BALSAM_AVAILABLE:
                         try:
-                            qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                            # 优先使用工作空间路径
+                            qml_output_dir = None
+                            try:
+                                import bpy
+                                scene = bpy.context.scene
+                                work_space = getattr(scene, 'work_space_path', None)
+                                if work_space:
+                                    qml_output_dir = work_space
+                            except:
+                                pass
+                            
+                            # 回退到默认路径
+                            if not qml_output_dir:
+                                qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                            
                             mesh_file = os.path.join(qml_output_dir, "meshes", "suzanne_mesh.mesh")
                             print(f"🔍 路径调试信息:")
                             print(f"  QML输出目录: {qml_output_dir}")

@@ -336,6 +336,13 @@ def register_scene_environment_properties():
         size=4
     )
     
+    # 裁剪启用开关
+    bpy.types.Scene.qtquick3d_scissor_enabled = BoolProperty(
+        name="Enable Scissor",
+        description="Enable scissor rectangle on SceneEnvironment",
+        default=False
+    )
+    
     bpy.types.Scene.qtquick3d_fog = StringProperty(
         name="Fog",
         description="Fog settings",
@@ -776,6 +783,7 @@ def unregister_qt_quick3d_properties():
     del bpy.types.Scene.qtquick3d_light_probe
     del bpy.types.Scene.qtquick3d_lightmapper
     del bpy.types.Scene.qtquick3d_scissor_rect
+    del bpy.types.Scene.qtquick3d_scissor_enabled
     del bpy.types.Scene.qtquick3d_fog
     del bpy.types.Scene.qtquick3d_debug_settings
     del bpy.types.Scene.qtquick3d_effects
@@ -1099,6 +1107,15 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
             row = basic_box.row(align=True)
             row.prop(scene, "qtquick3d_depth_test_enabled", text="Depth Test")
             row.prop(scene, "qtquick3d_depth_prepass_enabled", text="Depth PrePass")
+
+            # Scissor 设置
+            scissor_box = scene_settings_box.box()
+            scissor_box.label(text="Scissor:")
+            row = scissor_box.row(align=True)
+            row.prop(scene, "qtquick3d_scissor_enabled", text="Enable")
+            row = scissor_box.row(align=True)
+            row.enabled = getattr(scene, 'qtquick3d_scissor_enabled', False)
+            row.prop(scene, "qtquick3d_scissor_rect", text="Rect")
             row = basic_box.row(align=True)
             row.prop(scene, "qtquick3d_probe_exposure", text="Probe Exposure")
             row.prop(scene, "qtquick3d_probe_horizon", text="Probe Horizon")
@@ -1268,6 +1285,12 @@ class QT_QUICK3D_OT_balsam_convert_scene(Operator):
         try:
             from . import balsam_gltf_converter
             converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
+            
+            # 优先使用工作空间路径
+            work_space = getattr(context.scene, 'work_space_path', None)
+            if work_space:
+                converter.set_custom_output_dir(work_space)
+                print(f"✅ 使用工作空间路径: {work_space}")
             
             success = converter.convert(keep_files=True, copy_to_docs=False)
             
@@ -1489,13 +1512,17 @@ class QT_QUICK3D_OT_balsam_convert_existing(Operator):
             from . import balsam_gltf_converter
             converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
             
-            # 获取场景中保存的路径
+            # 优先使用工作空间路径，回退到旧属性
+            work_space = getattr(context.scene, 'work_space_path', None)
             gltf_path = getattr(context.scene, 'balsam_gltf_path', None)
-            output_dir = getattr(context.scene, 'balsam_output_dir', None)
+            output_dir = work_space or getattr(context.scene, 'balsam_output_dir', None)
             
             if not gltf_path:
                 self.report({'ERROR'}, "Please set GLTF path first")
                 return {'CANCELLED'}
+            
+            if work_space:
+                print(f"✅ 使用工作空间路径: {work_space}")
             
             success = converter.convert_existing_gltf(gltf_path, output_dir)
             

@@ -33,6 +33,15 @@ class QMLHandler:
     def setup_environment(self):
         """设置环境，获取QML输出目录"""
         try:
+            # 优先使用工作空间路径
+            if BLENDER_AVAILABLE:
+                scene = bpy.context.scene
+                work_space = getattr(scene, 'work_space_path', None)
+                if work_space:
+                    self.qml_output_dir = work_space
+                    print(f"✅ 使用工作空间路径: {self.qml_output_dir}")
+                    return True
+            
             # 导入balsam转换器模块以获取全局路径
             from . import balsam_gltf_converter
             self.qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
@@ -158,6 +167,8 @@ class QMLHandler:
             # scissor_rect: (x, y, width, height) - x,y是左上角坐标，width,height是View3D分辨率
             default_scissor_rect = (0.0, 0.0, settings.get('view3d_width', 1280), settings.get('view3d_height', 720))
             scissor_rect = getattr(scene, 'qtquick3d_scissor_rect', default_scissor_rect)
+            # 裁剪开关
+            settings['scissor_enabled'] = getattr(scene, 'qtquick3d_scissor_enabled', False)
             
             # 检查是否是归一化坐标（旧格式），如果是则转换为像素坐标
             if len(scissor_rect) >= 4 and scissor_rect[2] <= 1.0 and scissor_rect[3] <= 1.0:
@@ -465,8 +476,9 @@ Window {{
             if settings['lightmapper'] != 0:
                 qml_parts.append(f"lightmapper: {settings['lightmapper']}")
             
-            # 裁剪矩形（总是设置，使用View3D的实际分辨率）
-            qml_parts.append(f"scissorRect: {self.convert_rect_to_qml(settings['scissor_rect'])}")
+            # 裁剪矩形（仅在启用时写入）
+            if settings.get('scissor_enabled', False):
+                qml_parts.append(f"scissorRect: {self.convert_rect_to_qml(settings['scissor_rect'])}")
             
             # 雾效
             if settings['fog']:

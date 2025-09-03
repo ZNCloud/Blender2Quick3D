@@ -18,6 +18,15 @@ BASE_DIR = None
 def get_qml_output_dir():
     """获取QML输出目录的全局路径"""
     global QML_OUTPUT_DIR
+    # 如果Blender场景中定义了工作空间路径，则优先使用
+    try:
+        scene = bpy.context.scene
+        work_space = getattr(scene, 'work_space_path', None)
+        if work_space:
+            QML_OUTPUT_DIR = work_space
+            return QML_OUTPUT_DIR
+    except Exception:
+        pass
     if QML_OUTPUT_DIR is None:
         addon_dir = os.path.dirname(os.path.abspath(__file__))
         QML_OUTPUT_DIR = os.path.join(addon_dir, "output")  # 直接使用output目录
@@ -26,6 +35,15 @@ def get_qml_output_dir():
 def get_output_base_dir():
     """获取输出基础目录的全局路径"""
     global OUTPUT_BASE_DIR
+    # 如果Blender场景中定义了工作空间路径，则优先使用
+    try:
+        scene = bpy.context.scene
+        work_space = getattr(scene, 'work_space_path', None)
+        if work_space:
+            OUTPUT_BASE_DIR = work_space
+            return OUTPUT_BASE_DIR
+    except Exception:
+        pass
     if OUTPUT_BASE_DIR is None:
         addon_dir = os.path.dirname(os.path.abspath(__file__))
         OUTPUT_BASE_DIR = os.path.join(addon_dir, "output")
@@ -269,10 +287,12 @@ class BalsamGLTFToQMLConverter:
             self.gltf_path = os.path.join(self.output_base_dir, gltf_filename)
 
             # 导出的.qml路径保存下来作为一个全局变量
-            global BASE_DIR
-            # 直接在GLTF同级目录生成QML文件，不创建额外的qml文件夹
+            global BASE_DIR, QML_OUTPUT_DIR, OUTPUT_BASE_DIR
+            # 直接在GLTF同级目录生成QML文件
             BASE_DIR = self.output_base_dir
             self.qml_output_dir = self.output_base_dir
+            QML_OUTPUT_DIR = self.qml_output_dir
+            OUTPUT_BASE_DIR = self.output_base_dir
             
             print(f"📁 设置BASE_DIR为GLTF同级目录: {BASE_DIR}")
             print(f"📁 QML输出目录: {self.qml_output_dir}")
@@ -324,13 +344,19 @@ class BalsamGLTFToQMLConverter:
     def set_custom_output_dir(self, output_dir):
         """设置自定义输出目录"""
         if output_dir:
-            # 如果用户指定了输出目录，使用用户指定的
+            # 如果用户指定了输出目录，GLTF与QML均使用该目录
             self.qml_output_dir = output_dir
+            self.output_base_dir = output_dir
             os.makedirs(self.qml_output_dir, exist_ok=True)
+            # 同步更新全局变量，便于其他模块读取
+            global QML_OUTPUT_DIR, OUTPUT_BASE_DIR
+            QML_OUTPUT_DIR = self.qml_output_dir
+            OUTPUT_BASE_DIR = self.output_base_dir
             print(f"📁 设置自定义输出目录: {self.qml_output_dir}")
             return True
         else:
             # 如果没有指定，使用默认的output目录
+            self.output_base_dir = get_output_base_dir()
             self.qml_output_dir = self.output_base_dir
             print(f"📁 使用默认输出目录: {self.qml_output_dir}")
             return True

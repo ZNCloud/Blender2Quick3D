@@ -35,9 +35,7 @@
 					"qml_output_path":"//quick3d_scene.qml",
 					"use_blender_materials":1,
 					"use_blender_lights":1
-				},
-				"work_space_path":"D:\\BaiduSyncdisk\\Qt\\B2Q\\test\\",
-				"balsam_output_dir":"D:\\BaiduSyncdisk\\Qt\\B2Q\\test\\"
+				}
 			},
 			"name":"Scene",
 			"nodes":[
