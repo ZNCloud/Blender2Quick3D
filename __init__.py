@@ -1027,11 +1027,8 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         
         # QML转换功能
         layout.separator()
-        layout.label(text="QML Export:")
-        layout.operator(
-            "qt_quick3d.balsam_convert_scene",
-            text="Convert Scene to QML"
-        )
+      #  layout.label(text="QML Export:")
+        layout.operator("qt_quick3d.balsam_convert_scene",text="Convert Scene to QML")
         #设置导出路径
         # 设置工作空间路径
         layout.separator()
@@ -1044,7 +1041,7 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         scene = context.scene
 
         # Work Space Path 输入栏
-        layout.prop(scene, "work_space_path", text="Work Space")
+        #layout.prop(scene, "work_space_path", text="Work Space")
 
         # 兼容性提示（如果属性未设置，显示默认信息）
         work_space = getattr(scene, "work_space_path", None)
