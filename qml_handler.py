@@ -369,13 +369,33 @@ class QMLHandler:
         try:
             # 读取场景属性
             settings = self.read_scene_properties()
+            current_camera = bpy.context.scene.camera
+
             
+            # 检查 current_camera 的名称是否全为英文字符
+            is_camera_name_ascii = False
+            if current_camera and hasattr(current_camera, "name"):
+                try:
+                    current_camera.name.encode('ascii')
+                    is_camera_name_ascii = True
+                except UnicodeEncodeError:
+                    is_camera_name_ascii = False
+            
+            
+            if current_camera and is_camera_name_ascii:
+                current_camera_name = current_camera.name.lower()
+                wasd_controller_camera = current_camera_name + "_camera"
+                wasd_controller_qml = f"WasdController {{controlledObject: {wasd_controller_camera}}}"
+            else:
+                
+                wasd_controller_qml = ""
             # 生成SceneEnvironment QML字符串
             scene_environment_qml = self.generate_scene_environment_qml(settings)
             
             # 创建完整的QML内容
             head_qml = """"""
-            complete_qml = f'''import QtQuick
+            complete_qml = f'''
+import QtQuick
 import QtQuick3D
 import QtQuick3D.Helpers
 
@@ -394,6 +414,7 @@ Window {{
         // 插入清理后的QML内容
         {cleaned_qml_content}
     }}
+    {wasd_controller_qml}
 }}'''
             
             print(f"✅ 成功组装完整QML内容")
