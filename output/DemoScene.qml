@@ -43,8 +43,9 @@ Node {
         PerspectiveCamera {
             id: camera_camera
             objectName: "Camera"
-            position: Qt.vector3d(25.5588, 17.7931, 53.5079)
-            rotation: Qt.quaternion(0.97132, -0.146095, 0.185511, 0.027902)
+            position: Qt.vector3d(17.3736, 20.5572, 55.076)
+            rotation: Qt.quaternion(0.978585, -0.172909, 0.109984, 0.0194329)
+            scale: Qt.vector3d(1, 1, 1)
             clipNear: 0.10000000149011612
             clipFar: 100
             fieldOfView: 39.59775924682617

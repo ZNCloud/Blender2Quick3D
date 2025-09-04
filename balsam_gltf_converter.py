@@ -72,7 +72,14 @@ class BalsamGLTFToQMLConverter:
         # 不再创建额外的qml目录，直接在output目录中生成文件
         
         # 查找balsam可执行文件
+        print("🔍 开始查找balsam可执行文件...")
+        old_path = self.balsam_path
         self.balsam_path = self._find_balsam_executable()
+        print(f"🔍 最终选择的balsam路径: {self.balsam_path}")
+        if old_path != self.balsam_path:
+            print(f"🔍 路径已更改: {old_path} -> {self.balsam_path}")
+        else:
+            print(f"🔍 路径未更改: {self.balsam_path}")
         
         # 检查依赖文件
         self._check_dependencies()
@@ -157,6 +164,30 @@ class BalsamGLTFToQMLConverter:
 
     def _find_balsam_executable(self):
         """查找balsam可执行文件"""
+        # 优先使用全局选定的balsam路径
+        try:
+            # 直接导入模块并获取全局变量
+            import sys
+            addon_name = 'Blender2Quick3D'
+            
+            if addon_name in sys.modules:
+                addon_main = sys.modules[addon_name]
+                selected_path = getattr(addon_main, 'SELECTED_BALSAM_PATH', None)
+                print(f"🔍 全局选定的balsam路径: {selected_path}")
+                
+                if selected_path and os.path.exists(selected_path):
+                    print(f"✅ 使用全局选定的balsam版本: {selected_path}")
+                    # 存储选定的路径，环境变量将在调用时设置
+                    return selected_path
+                else:
+                    print(f"❌ 全局选定的路径无效或为空: {selected_path}")
+            else:
+                print(f"❌ 无法找到插件模块: {addon_name}")
+        except Exception as e:
+            print(f"❌ 获取全局选定路径失败: {e}")
+            import traceback
+            traceback.print_exc()
+
         # 检查插件目录下的balsam - 使用成功的路径
         addon_dir = os.path.dirname(os.path.abspath(__file__))
         balsam_paths = [
@@ -182,9 +213,58 @@ class BalsamGLTFToQMLConverter:
                 return path
         except:
             pass
+
+        # 最后：主动扫描 C:/Qt 并优先选择 mingw 路径
+        try:
+            from . import __init__ as addon_main
+            if hasattr(addon_main, '_scan_qt_balsam_paths'):
+                candidates = addon_main._scan_qt_balsam_paths()
+                if candidates:
+                    # mingw优先
+                    mingw = [p for p in candidates if 'mingw' in p.lower()]
+                    if mingw:
+                        print(f"✅ 扫描C:/Qt找到mingw balsam: {mingw[0]}")
+                        return mingw[0]
+                    # 回退msvc
+                    print(f"✅ 扫描C:/Qt找到balsam: {candidates[0]}")
+                    return candidates[0]
+        except Exception as e:
+            print(f"扫描C:/Qt失败: {e}")
         
         print("❌ 未找到balsam可执行文件")
         return None
+    
+    def _get_qt_environment_for_path(self, balsam_path):
+        """为选定的balsam路径获取正确的Qt环境变量（不修改系统环境）"""
+        try:
+            # 从balsam路径推导Qt安装目录
+            # 例如: C:\Qt\6.5.5\mingw_64\bin\balsam.exe -> C:\Qt\6.5.5\mingw_64
+            qt_install_dir = os.path.dirname(os.path.dirname(balsam_path))
+            qt_bin_dir = os.path.dirname(balsam_path)
+            
+            print(f"🔧 为balsam准备Qt环境:")
+            print(f"  Qt安装目录: {qt_install_dir}")
+            print(f"  Qt bin目录: {qt_bin_dir}")
+            
+            # 创建环境变量字典（不修改系统环境）
+            env = os.environ.copy()
+            env['QT_DIR'] = qt_install_dir
+            env['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(qt_install_dir, "plugins", "platforms")
+            env['QT_PLUGIN_PATH'] = os.path.join(qt_install_dir, "plugins")
+            env['QT_QML_IMPORT_PATH'] = os.path.join(qt_install_dir, "qml")
+            
+            # 更新PATH，将Qt bin目录放在最前面
+            current_path = env.get('PATH', '')
+            if qt_bin_dir not in current_path:
+                env['PATH'] = f"{qt_bin_dir};{current_path}"
+                print(f"  ✅ 已设置临时PATH，Qt bin目录优先")
+            
+            print(f"  ✅ Qt环境变量准备完成")
+            return env
+            
+        except Exception as e:
+            print(f"❌ 准备Qt环境变量失败: {e}")
+            return os.environ.copy()
     
     def _check_dependencies(self):
         """检查依赖文件"""
@@ -394,6 +474,21 @@ class BalsamGLTFToQMLConverter:
     
     def call_balsam_converter(self):
         """调用balsam转换器"""
+        # 优先使用全局选定的balsam路径
+        try:
+            import sys
+            addon_name = 'Blender2Quick3D'
+            if addon_name in sys.modules:
+                addon_main = sys.modules[addon_name]
+                selected_path = getattr(addon_main, 'SELECTED_BALSAM_PATH', None)
+                if selected_path and os.path.exists(selected_path):
+                    print(f"🎯 使用全局选定的balsam版本: {selected_path}")
+                    self.balsam_path = selected_path
+                else:
+                    print(f"⚠️ 全局选定路径无效，使用默认: {self.balsam_path}")
+        except Exception as e:
+            print(f"⚠️ 获取全局选定路径失败，使用默认: {e}")
+        
         if not self.balsam_path:
             print("❌ 未找到balsam可执行文件")
             return False
@@ -404,45 +499,53 @@ class BalsamGLTFToQMLConverter:
             
         try:
             print(f"🔧 调用balsam转换器: {self.balsam_path}")
+            print(f"🎯 最终执行的balsam版本: {os.path.basename(self.balsam_path)}")
+            print(f"🎯 完整路径: {self.balsam_path}")
             
-            # 设置环境变量
-            env = os.environ.copy()
-            addon_dir = os.path.dirname(os.path.abspath(__file__))
-            
-            # 设置PySide6相关环境变量
-            lib_dir = os.path.join(addon_dir, "lib")
-            env['PYTHONPATH'] = lib_dir
-            
-            # 设置Qt相关环境变量
-            qt_dir = os.path.join(lib_dir, "PySide6", "Qt6")
-            if os.path.exists(qt_dir):
-                env['QT_DIR'] = qt_dir
-                env['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(qt_dir, "plugins", "platforms")
-                env['QT_PLUGIN_PATH'] = os.path.join(qt_dir, "plugins")
-            
-            # 设置Shiboken相关环境变量
-            shiboken_dir = os.path.join(lib_dir, "shiboken6")
-            if os.path.exists(shiboken_dir):
-                env['PYTHONPATH'] = f"{shiboken_dir};{env['PYTHONPATH']}"
-            
-            # 设置系统PATH，确保能找到所有DLL
-            system_path = env.get('PATH', '')
-            additional_paths = [
-                lib_dir,
-                os.path.join(lib_dir, "bin"),
-                os.path.join(lib_dir, "PySide6"),
-                os.path.join(lib_dir, "shiboken6"),
-                qt_dir if os.path.exists(qt_dir) else "",
-                os.path.join(qt_dir, "bin") if os.path.exists(qt_dir) else ""
-            ]
-            
-            # 过滤掉不存在的路径
-            additional_paths = [p for p in additional_paths if p and os.path.exists(p)]
-            if additional_paths:
-                env['PATH'] = f"{';'.join(additional_paths)};{system_path}"
+            # 根据balsam路径类型准备环境变量
+            if "Blender2Quick3D" in self.balsam_path:
+                # 插件内的balsam
+                env = os.environ.copy()
+                addon_dir = os.path.dirname(os.path.abspath(__file__))
+                lib_dir = os.path.join(addon_dir, "lib")
+                env['PYTHONPATH'] = lib_dir
+                
+                # 设置Qt相关环境变量
+                qt_dir = os.path.join(lib_dir, "PySide6", "Qt6")
+                if os.path.exists(qt_dir):
+                    env['QT_DIR'] = qt_dir
+                    env['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(qt_dir, "plugins", "platforms")
+                    env['QT_PLUGIN_PATH'] = os.path.join(qt_dir, "plugins")
+                
+                # 设置Shiboken相关环境变量
+                shiboken_dir = os.path.join(lib_dir, "shiboken6")
+                if os.path.exists(shiboken_dir):
+                    env['PYTHONPATH'] = f"{shiboken_dir};{env['PYTHONPATH']}"
+                
+                # 设置系统PATH，确保能找到所有DLL
+                system_path = env.get('PATH', '')
+                additional_paths = [
+                    lib_dir,
+                    os.path.join(lib_dir, "bin"),
+                    os.path.join(lib_dir, "PySide6"),
+                    os.path.join(lib_dir, "shiboken6"),
+                    qt_dir if os.path.exists(qt_dir) else "",
+                    os.path.join(qt_dir, "bin") if os.path.exists(qt_dir) else ""
+                ]
+                
+                # 过滤掉不存在的路径
+                additional_paths = [p for p in additional_paths if p and os.path.exists(p)]
+                if additional_paths:
+                    env['PATH'] = f"{';'.join(additional_paths)};{system_path}"
+            else:
+                # C:\Qt下的balsam，使用临时环境变量
+                env = self._get_qt_environment_for_path(self.balsam_path)
             
             print(f"🔧 环境变量设置:")
-            print(f"  PYTHONPATH: {env['PYTHONPATH']}")
+            if 'PYTHONPATH' in env:
+                print(f"  PYTHONPATH: {env['PYTHONPATH']}")
+            else:
+                print(f"  PYTHONPATH: (未设置)")
             print(f"  PATH: {env['PATH'][:200]}...")
             if 'QT_DIR' in env:
                 print(f"  QT_DIR: {env['QT_DIR']}")
@@ -527,6 +630,8 @@ class BalsamGLTFToQMLConverter:
             
             if success:
                 print("🎉 Balsam转换成功！")
+                print(f"✅ 使用的balsam版本: {os.path.basename(self.balsam_path)}")
+                print(f"✅ 完整路径: {self.balsam_path}")
                 return True
             else:
                 print("❌ 所有参数格式都失败了")

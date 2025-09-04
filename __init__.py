@@ -14,7 +14,7 @@ import bpy
 import os
 import sys
 import subprocess
-from bpy.props import StringProperty, BoolProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Panel, Operator, AddonPreferences
 
 # 定义依赖路径（插件内的 lib 文件夹）
@@ -60,6 +60,154 @@ except ImportError as e:
     qt_quick3d_integration = None
     render_engine = None
 
+# 供下拉框与转换器共享：Qt安装中的balsam路径映射
+BALSAM_PATH_MAP = {}
+BALSAM_CACHE_FILE = os.path.join(os.path.dirname(__file__), "balsam_version.txt")
+BALSAM_CACHE_LOADED = False
+# 全局变量：最终执行的balsam路径
+SELECTED_BALSAM_PATH = None
+
+def _scan_qt_balsam_paths():
+    """扫描Qt安装目录，查找bin下的balsam.exe - 简化版本避免卡死"""
+    candidates = []
+    try:
+        qt_root = r"C:\Qt"
+        if not os.path.exists(qt_root):
+            return candidates
+            
+        # 只扫描第一级版本目录
+        for version_dir in os.listdir(qt_root):
+            version_path = os.path.join(qt_root, version_dir)
+            if not os.path.isdir(version_path):
+                continue
+                
+            # 在版本目录下查找mingw和msvc目录
+            for toolchain_dir in os.listdir(version_path):
+                toolchain_path = os.path.join(version_path, toolchain_dir)
+                if not os.path.isdir(toolchain_path):
+                    continue
+                    
+                # 只检查mingw和msvc目录
+                if 'mingw' in toolchain_dir.lower() or 'msvc' in toolchain_dir.lower():
+                    bin_path = os.path.join(toolchain_path, 'bin')
+                    balsam_exe = os.path.join(bin_path, 'balsam.exe')
+                    if os.path.exists(balsam_exe):
+                        candidates.append(balsam_exe)
+                        
+    except Exception as e:
+        print(f"扫描Qt目录失败: {e}")
+    return candidates
+
+def _label_for_balsam_path(path_str: str) -> str:
+    """生成友好标签，例如 6.5.3-mingw_64 或 6.5.3-msvc2019_64"""
+    try:
+        p = path_str.replace('\\', '/').lower()
+        # 抓版本号
+        import re
+        m = re.search(r"/(\d+\.\d+\.\d+)/", p)
+        ver = m.group(1) if m else "unknown"
+        toolchain = "mingw" if "mingw" in p else ("msvc" if "msvc" in p else "qt")
+        # 进一步细分架构
+        arch = "64" if "_64" in p or "64" in p else ("32" if "_32" in p or "32" in p else "")
+        if toolchain == 'msvc':
+            # 提取msvc后缀
+            m2 = re.search(r"msvc(\d+)_?(\d+)?", p)
+            if m2:
+                tc = f"msvc{m2.group(1)}{('_' + m2.group(2)) if m2.group(2) else ''}"
+            else:
+                tc = "msvc"
+        elif toolchain == 'mingw':
+            tc = "mingw"
+        else:
+            tc = "qt"
+        suffix = f"_{arch}" if arch else ""
+        return f"{ver}-{tc}{suffix}"
+    except Exception:
+        return os.path.basename(path_str)
+
+def _load_balsam_cache():
+    """从缓存文件加载balsam路径映射"""
+    global BALSAM_PATH_MAP, BALSAM_CACHE_LOADED
+    
+    # 如果已经加载过，直接返回
+    if BALSAM_CACHE_LOADED:
+        return len(BALSAM_PATH_MAP) > 0
+    
+    BALSAM_PATH_MAP = {}
+    
+    if not os.path.exists(BALSAM_CACHE_FILE):
+        print(f"❌ 缓存文件不存在: {BALSAM_CACHE_FILE}")
+        BALSAM_CACHE_LOADED = True
+        return False
+        
+    try:
+        with open(BALSAM_CACHE_FILE, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        for line in lines:
+            line = line.strip()
+            if '=' in line:
+                key, path = line.split('=', 1)
+                if os.path.exists(path):
+                    BALSAM_PATH_MAP[key] = path
+                    
+        print(f"✅ 从缓存加载了 {len(BALSAM_PATH_MAP)} 个balsam路径")
+        BALSAM_CACHE_LOADED = True
+        return len(BALSAM_PATH_MAP) > 0
+    except Exception as e:
+        print(f"❌ 加载balsam缓存失败: {e}")
+        BALSAM_CACHE_LOADED = True
+        return False
+
+def _save_balsam_cache():
+    """保存balsam路径映射到缓存文件"""
+    try:
+        with open(BALSAM_CACHE_FILE, 'w', encoding='utf-8') as f:
+            for key, path in BALSAM_PATH_MAP.items():
+                f.write(f"{key}={path}\n")
+        print(f"✅ 已保存 {len(BALSAM_PATH_MAP)} 个balsam路径到缓存")
+        return True
+    except Exception as e:
+        print(f"❌ 保存balsam缓存失败: {e}")
+        return False
+
+def _update_balsam_selection(self, context):
+    """当下拉框选择改变时更新全局balsam路径"""
+    global SELECTED_BALSAM_PATH, BALSAM_PATH_MAP
+    
+    selected = getattr(context.scene, 'balsam_version', 'AUTO')
+    print(f"🔧 下拉框选择改变: {selected}")
+    
+    if selected == 'AUTO':
+        SELECTED_BALSAM_PATH = None
+        print(f"🔧 设置为Auto模式，将自动检测balsam路径")
+    else:
+        # 确保缓存已加载
+        _load_balsam_cache()
+        chosen = BALSAM_PATH_MAP.get(selected)
+        if chosen and os.path.exists(chosen):
+            SELECTED_BALSAM_PATH = chosen
+            print(f"✅ 设置选定的balsam路径: {chosen}")
+        else:
+            SELECTED_BALSAM_PATH = None
+            print(f"❌ 选择的路径无效: {chosen}")
+    
+    # 确保系统PATH不被污染，恢复原始PATH
+    # 这里我们不做任何PATH修改，让QML窗口正常工作
+
+def _build_balsam_enum_items(self, context):
+    """为EnumProperty提供items，并刷新全局映射。"""
+    global BALSAM_PATH_MAP
+    
+    # 只加载一次缓存
+    _load_balsam_cache()
+    
+    items = [("AUTO", "Auto", "Auto-detect from C:/Qt (prefer mingw) or PATH")]
+    for key, exe in BALSAM_PATH_MAP.items():
+        label = _label_for_balsam_path(exe)
+        items.append((key, label, exe))
+    return items
+
 # 添加场景属性
 def register_scene_properties():
     """注册场景属性"""
@@ -84,6 +232,14 @@ def register_scene_properties():
         description="Custom output directory for Balsam conversion",
         default="",
         subtype='DIR_PATH'
+    )
+
+    bpy.types.Scene.balsam_version = EnumProperty(
+        name="Balsam Version",
+        description="Choose a Qt Design Studio balsam.exe under C:/Qt or Auto",
+        items=_build_balsam_enum_items,
+        default=0,
+        update=_update_balsam_selection,
     )
     
     register_qt_quick3d_properties()
@@ -743,6 +899,11 @@ def unregister_scene_properties():
     del bpy.types.Scene.work_space_path
     del bpy.types.Scene.balsam_gltf_path
     del bpy.types.Scene.balsam_output_dir
+    # 版本选择
+    try:
+        del bpy.types.Scene.balsam_version
+    except Exception:
+        pass
     
     # 注销Qt Quick3D引擎属性
     unregister_qt_quick3d_properties()
@@ -1057,6 +1218,10 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         # 添加balsam版本选择下拉框
         layout.separator()
         layout.label(text="Balsam Version:")
+        
+        # 搜索按钮
+        row = layout.row()
+        row.operator("qt_quick3d.search_local_balsam", text="Search Local Balsam", icon='VIEWZOOM')
 
         # 确保场景有balsam_version属性，否则显示默认
         if not hasattr(scene, "balsam_version"):
@@ -1066,8 +1231,6 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
             # 下拉框，允许用户选择balsam版本
             layout.prop(scene, "balsam_version", text="Select Version")
 
-        row = layout.row()
-        row.operator("qt_quick3d.balsam_convert_existing", text="Convert Existing GLTF")
         
         #SceneSettings，用于设置弹出的窗口大小，view3d大小，sceneEnvironment设置
         # INSERT_YOUR_CODE
@@ -1495,6 +1658,50 @@ class QT_QUICK3D_OT_balsam_set_output_dir(Operator):
                 
         except Exception as e:
             self.report({'ERROR'}, f"Failed to set output directory: {str(e)}")
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_search_local_balsam(Operator):
+    """搜索本地balsam版本"""
+    bl_idname = "qt_quick3d.search_local_balsam"
+    bl_label = "Search Local Balsam"
+    bl_description = "Search for local balsam.exe in C:/Qt and save to cache"
+    
+    def execute(self, context):
+        try:
+            print("🔍 开始搜索本地balsam版本...")
+            
+            # 扫描C:/Qt
+            candidates = _scan_qt_balsam_paths()
+            
+            if not candidates:
+                self.report({'WARNING'}, "No balsam.exe found in C:/Qt")
+                return {'CANCELLED'}
+            
+            # 更新全局映射
+            global BALSAM_PATH_MAP, BALSAM_CACHE_LOADED
+            BALSAM_PATH_MAP = {}
+            for i, exe in enumerate(candidates):
+                key = f"QT_{i}"
+                BALSAM_PATH_MAP[key] = exe
+            
+            # 重置缓存加载标志
+            BALSAM_CACHE_LOADED = False
+            
+            # 保存到缓存文件
+            if _save_balsam_cache():
+                self.report({'INFO'}, f"Found {len(candidates)} balsam versions and saved to cache")
+                
+                # 刷新界面
+                for area in context.screen.areas:
+                    area.tag_redraw()
+            else:
+                self.report({'ERROR'}, "Failed to save balsam cache")
+                return {'CANCELLED'}
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"Search failed: {str(e)}")
+            return {'CANCELLED'}
         
         return {'FINISHED'}
 
@@ -1955,6 +2162,7 @@ classes = [
     QT_QUICK3D_OT_balsam_open_gltf,
     QT_QUICK3D_OT_balsam_open_qml,
     QT_QUICK3D_OT_balsam_cleanup,
+    QT_QUICK3D_OT_search_local_balsam,
     # Quick3D窗口操作符
     QT_QUICK3D_OT_open_quick_window,
 ]
@@ -1963,8 +2171,26 @@ classes = [
 print("✓ Balsam converter will be integrated into render properties panel")
 
 def register():
+    # 加载balsam缓存
+    _load_balsam_cache()
+    
     # 注册场景属性
     register_scene_properties()
+    
+    # 初始化全局balsam路径（基于默认选择）
+    global SELECTED_BALSAM_PATH
+    try:
+        # 获取默认场景的balsam版本选择
+        if hasattr(bpy.context, 'scene') and bpy.context.scene:
+            scene = bpy.context.scene
+            selected = getattr(scene, 'balsam_version', 'AUTO')
+            if selected != 'AUTO':
+                chosen = BALSAM_PATH_MAP.get(selected)
+                if chosen and os.path.exists(chosen):
+                    SELECTED_BALSAM_PATH = chosen
+                    print(f"✅ 初始化全局balsam路径: {chosen}")
+    except Exception as e:
+        print(f"⚠️ 初始化全局balsam路径失败: {e}")
     
     # 注册主插件类
     for cls in classes:
