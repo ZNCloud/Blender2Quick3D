@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Qt6.9 Quick3D Engine",
-    "author": "ZhiningJiao",
+    "author": "Zhining_Jiao",
     "version": (1, 0, 0),
     "blender": (4, 1, 0),
     "location": "View3D > Sidebar > Qt6.9 Quick3D",
@@ -1377,6 +1377,13 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         # 提供调用balsam转换和写入的按钮
         layout.separator()
         layout.label(text="Balsam Conversion:")
+        
+        # 添加IBL图像复制测试按钮
+        layout.separator()
+        layout.label(text="IBL Image Copy Test:")
+        row = layout.row()
+        row.operator("qt_quick3d.test_ibl_copy", text="Test IBL Copy", icon='IMAGE_DATA')
+        
         # INSERT_YOUR_CODE
         # 添加balsam版本选择下拉框
         layout.separator()
@@ -1654,6 +1661,8 @@ class QT_QUICK3D_OT_balsam_convert_scene(Operator):
     def execute(self, context):
         try:
             from . import balsam_gltf_converter
+            from . import ibl_mappling
+            
             converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
             
             # 优先使用工作空间路径
@@ -1662,20 +1671,121 @@ class QT_QUICK3D_OT_balsam_convert_scene(Operator):
                 converter.set_custom_output_dir(work_space)
                 print(f"✅ 使用工作空间路径: {work_space}")
             
+            # 在转换之前复制world图像
+            print("🔄 开始复制World图像到输出目录...")
+            copy_result = ibl_mappling.copy_all_world_images_to_balsam_output()
+            
+            if copy_result['surface_copied']:
+                self.report({'INFO'}, f"Surface IBL图像已复制: {os.path.basename(copy_result['surface_image_dest'])}")
+                print(f"✅ Surface IBL图像复制成功: {copy_result['surface_image_dest']}")
+            
+            if copy_result['environment_copied']:
+                self.report({'INFO'}, f"Environment IBL图像已复制: {os.path.basename(copy_result['environment_image_dest'])}")
+                print(f"✅ Environment IBL图像复制成功: {copy_result['environment_image_dest']}")
+            
+            if not copy_result['surface_copied'] and not copy_result['environment_copied']:
+                print("ℹ️ 没有World图像需要复制")
+            
+            # 执行Balsam转换
             success = converter.convert(keep_files=True, copy_to_docs=False)
             
             if success:
                 self.report({'INFO'}, "Balsam conversion successful!")
                 paths = converter.get_output_paths()
                 self.report({'INFO'}, f"Output directory: {paths['base_dir']}")
+                
+                # 显示IBL图像复制结果
+                if copy_result['surface_copied'] or copy_result['environment_copied']:
+                    ibl_files = ibl_mappling.get_ibl_image_paths_in_output()
+                    if ibl_files['iblimage_files']:
+                        self.report({'INFO'}, f"IBL图像文件: {len(ibl_files['iblimage_files'])} 个")
+                        for file_path in ibl_files['iblimage_files']:
+                            print(f"  📁 IBL文件: {os.path.basename(file_path)}")
             else:
                 self.report({'ERROR'}, "Balsam conversion failed")
                 
         except Exception as e:
             self.report({'ERROR'}, f"Conversion failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
         
         return {'FINISHED'}
 
+
+class QT_QUICK3D_OT_test_ibl_copy(Operator):
+    """Test IBL image copy functionality"""
+    bl_idname = "qt_quick3d.test_ibl_copy"
+    bl_label = "Test IBL Copy"
+    bl_description = "Test copying world images to balsam output directory"
+    
+    def execute(self, context):
+        try:
+            from . import ibl_mappling
+            
+            print("🧪 开始测试IBL图像复制功能...")
+            print("=" * 60)
+            
+            # 1. 获取world图像信息
+            print("1. 获取World图像信息:")
+            world_info = ibl_mappling.get_world_surface_connected_image_paths()
+            
+            if not world_info['surface_image'] and not world_info['environment_image']:
+                self.report({'WARNING'}, "当前World没有连接图像")
+                print("⚠️ 当前World没有连接图像")
+                return {'CANCELLED'}
+            
+            # 2. 获取balsam输出目录
+            print("\n2. 获取Balsam输出目录:")
+            output_dir = ibl_mappling.get_balsam_output_base_dir()
+            if not output_dir:
+                self.report({'ERROR'}, "无法获取Balsam输出目录")
+                print("❌ 无法获取Balsam输出目录")
+                return {'CANCELLED'}
+            
+            # 3. 复制world图像
+            print("\n3. 复制World图像到Balsam输出目录:")
+            copy_result = ibl_mappling.copy_all_world_images_to_balsam_output()
+            
+            # 4. 显示结果
+            print("\n4. 复制结果:")
+            success_count = 0
+            
+            if copy_result['surface_copied']:
+                success_count += 1
+                self.report({'INFO'}, f"Surface IBL图像已复制: {os.path.basename(copy_result['surface_image_dest'])}")
+                print(f"✅ Surface IBL图像复制成功: {copy_result['surface_image_dest']}")
+            
+            if copy_result['environment_copied']:
+                success_count += 1
+                self.report({'INFO'}, f"Environment IBL图像已复制: {os.path.basename(copy_result['environment_image_dest'])}")
+                print(f"✅ Environment IBL图像复制成功: {copy_result['environment_image_dest']}")
+            
+            if success_count == 0:
+                self.report({'WARNING'}, "没有图像被复制")
+                print("⚠️ 没有图像被复制")
+            else:
+                self.report({'INFO'}, f"成功复制 {success_count} 个IBL图像文件")
+                print(f"🎉 成功复制 {success_count} 个IBL图像文件")
+            
+            # 5. 显示输出目录中的IBL文件
+            print("\n5. 输出目录中的IBL文件:")
+            ibl_files = ibl_mappling.get_ibl_image_paths_in_output()
+            if ibl_files['iblimage_files']:
+                print(f"   找到 {len(ibl_files['iblimage_files'])} 个IBL文件:")
+                for file_path in ibl_files['iblimage_files']:
+                    print(f"   📁 {os.path.basename(file_path)}")
+            else:
+                print("   ℹ️ 输出目录中没有IBL文件")
+            
+            print("\n✅ IBL图像复制测试完成！")
+            return {'FINISHED'}
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"IBL复制测试失败: {str(e)}")
+            print(f"❌ IBL复制测试失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
 
 
 class QT_QUICK3D_OT_balsam_open_output(Operator):
@@ -2364,6 +2474,7 @@ classes = [
     QT_QUICK3D_OT_set_render_engine,
     # Balsam转换器操作符
     QT_QUICK3D_OT_balsam_convert_scene,
+    QT_QUICK3D_OT_test_ibl_copy,
     QT_QUICK3D_OT_balsam_convert_existing,
     QT_QUICK3D_OT_balsam_set_work_space,
     QT_QUICK3D_OT_balsam_set_gltf_path,

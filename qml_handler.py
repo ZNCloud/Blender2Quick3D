@@ -157,6 +157,19 @@ class QMLHandler:
             settings['probe_orientation'] = getattr(scene, 'qtquick3d_probe_orientation', (0.0, 0.0, 0.0))
             settings['skybox_cubemap'] = getattr(scene, 'qtquick3d_skybox_cubemap', "")
             settings['skybox_blur_amount'] = getattr(scene, 'qtquick3d_skybox_blur_amount', 0.0)
+            
+            # IBL检测和设置
+            try:
+                from . import ibl_mappling
+                world_info = ibl_mappling.get_world_surface_connected_image_paths()
+                settings['has_ibl'] = world_info['has_ibl']
+                settings['ibl_path'] = world_info['ibl_path']
+                if world_info['has_ibl']:
+                    print(f"🌍 检测到IBL图像，路径: {world_info['ibl_path']}")
+            except Exception as e:
+                print(f"⚠️ IBL检测失败: {e}")
+                settings['has_ibl'] = False
+                settings['ibl_path'] = ""
             settings['specular_aa_enabled'] = getattr(scene, 'qtquick3d_specular_aa_enabled', False)
             settings['temporal_aa_enabled'] = getattr(scene, 'qtquick3d_temporal_aa_enabled', False)
             settings['temporal_aa_strength'] = getattr(scene, 'qtquick3d_temporal_aa_strength', 0.0)
@@ -469,9 +482,11 @@ Window {{
             qml_parts = []
             
             # 基本属性
-            qml_parts.append(f"backgroundMode: {self.get_background_mode_qml(settings['background_mode'])}")
             qml_parts.append(f"antialiasingMode: {self.get_antialiasing_mode_qml(settings['antialiasing_mode'])}")
             qml_parts.append(f"antialiasingQuality: {self.get_antialiasing_quality_qml(settings['antialiasing_quality'])}")
+            
+            # 背景模式 - 以UI设置为主导
+            qml_parts.append(f"backgroundMode: {self.get_background_mode_qml(settings['background_mode'])}")
             
             # 只有在Color模式下才设置clearColor
             if settings['background_mode'] == 0:  # SceneEnvironment.Color
@@ -505,6 +520,7 @@ Window {{
             # 天空盒
             if settings['skybox_cubemap']:
                 qml_parts.append(f"skyBoxCubeMap: \"{settings['skybox_cubemap']}\"")
+            
             if settings['skybox_blur_amount'] > 0.0:
                 qml_parts.append(f"skyboxBlurAmount: {settings['skybox_blur_amount']}")
             
@@ -523,10 +539,12 @@ Window {{
             if settings['oit_method'] != 0:
                 qml_parts.append(f"oitMethod: {self.get_oit_method_qml(settings['oit_method'])}")
             
-            # 光照探针
-            if settings['light_probe']:
-                qml_parts.append(f"lightProbe: \"{settings['light_probe']}\"")
-            
+            # 光照探针 - 优先使用IBL路径
+            if settings.get('has_ibl', False) and settings.get('ibl_path'):
+                qml_parts.append(f'lightProbe: Texture {{ source: "{settings["ibl_path"]}" }}')
+                print(f"🌍 使用IBL图像作为光照探针: {settings['ibl_path']}")
+            elif settings['light_probe']:
+                qml_parts.append(f'lightProbe: "{settings["light_probe"]}"')
             # 光照映射器
             if settings['lightmapper'] != 0:
                 qml_parts.append(f"lightmapper: {settings['lightmapper']}")
@@ -567,9 +585,11 @@ Window {{
             qml_parts = []
             
             # 基础SceneEnvironment属性（继承）
-            qml_parts.append(f"backgroundMode: {self.get_background_mode_qml(settings['background_mode'])}")
             qml_parts.append(f"antialiasingMode: {self.get_antialiasing_mode_qml(settings['antialiasing_mode'])}")
             qml_parts.append(f"antialiasingQuality: {self.get_antialiasing_quality_qml(settings['antialiasing_quality'])}")
+            
+            # 背景模式 - 以UI设置为主导
+            qml_parts.append(f"backgroundMode: {self.get_background_mode_qml(settings['background_mode'])}")
             
             # 只有在Color模式下才设置clearColor
             if settings['background_mode'] == 0:  # SceneEnvironment.Color
