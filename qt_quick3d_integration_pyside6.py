@@ -27,57 +27,33 @@ except ImportError:
     QML_HANDLER_AVAILABLE = False
     print("Warning: QML handler not available")
 
-# 设置PySide6路径
-def setup_pyside6_environment():
-    """设置PySide6环境"""
+# 检查系统PySide6可用性
+def check_system_pyside6():
+    """检查系统PySide6是否可用"""
     try:
-        # 获取插件目录
-        plugin_dir = os.path.dirname(os.path.abspath(__file__))
-        pyside6_dir = os.path.join(plugin_dir, "lib", "PySide6")
+        # 直接尝试导入系统PySide6
+        import PySide6
+        pyside6_path = os.path.dirname(PySide6.__file__)
+        print(f"✅ 找到系统PySide6: {pyside6_path}")
         
-        if not os.path.exists(pyside6_dir):
-            print(f"Warning: PySide6目录不存在: {pyside6_dir}")
-            return False
-        
-        print(f"PySide6目录: {pyside6_dir}")
-        
-        # 添加PySide6路径到Python路径
-        if pyside6_dir not in sys.path:
-            sys.path.insert(0, pyside6_dir)
-            print(f"Added PySide6 path: {pyside6_dir}")
-        
-        # 设置Qt环境变量
-        qt6_dir = os.path.join(pyside6_dir, "Qt6")
-        if os.path.exists(qt6_dir):
-            os.environ['QT_DIR'] = qt6_dir
-            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(qt6_dir, "plugins")
-            os.environ['QT_PLUGIN_PATH'] = os.path.join(qt6_dir, "plugins")
-            os.environ['QT_QML_IMPORT_PATH'] = os.path.join(qt6_dir, "qml")
-            print(f"Set Qt environment variables: {qt6_dir}")
-        
-        # 设置DLL搜索路径
-        if hasattr(os, 'add_dll_directory'):
-            bin_dir = os.path.join(qt6_dir, "bin")
-            if os.path.exists(bin_dir):
-                try:
-                    os.add_dll_directory(bin_dir)
-                    print(f"Added DLL directory: {bin_dir}")
-                except Exception as e:
-                    print(f"Warning: Failed to add DLL directory: {e}")
-        
-        print("✓ PySide6环境设置完成")
-        return True
-        
-    except Exception as e:
-        print(f"✗ PySide6环境设置失败: {e}")
+        # 检查是否在系统路径中
+        if "site-packages" in pyside6_path or "dist-packages" in pyside6_path:
+            print("✅ 确认使用系统安装的PySide6")
+            return True
+        else:
+            print("⚠️ PySide6路径可能不是系统安装")
+            return True  # 仍然尝试使用
+            
+    except ImportError as e:
+        print(f"❌ 系统没有PySide6: {e}")
         return False
 
-# 尝试设置PySide6环境
+# 尝试导入系统PySide6
 QT_AVAILABLE = False
 QUICK3D_AVAILABLE = False
 
-# 先尝试设置环境
-if setup_pyside6_environment():
+# 检查系统PySide6
+if check_system_pyside6():
     try:
         # 尝试导入PySide6
         import PySide6
@@ -96,10 +72,10 @@ if setup_pyside6_environment():
             print(f"⚠️  PySide6.QtQuick3D 加载失败: {e}")
         
         QT_AVAILABLE = True
-        print("✓ PySide6 加载成功")
+        print("✓ 系统PySide6 加载成功")
         
     except ImportError as e:
-        print(f"✗ PySide6加载失败: {e}")
+        print(f"✗ 系统PySide6加载失败: {e}")
         QT_AVAILABLE = False
 
 def show_quick3d_window():

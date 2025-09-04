@@ -17,24 +17,22 @@ import subprocess
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Panel, Operator, AddonPreferences
 
-# 定义依赖路径（插件内的 lib 文件夹）
+# 定义插件目录
 ADDON_DIR = os.path.dirname(__file__)
-LIB_DIR = os.path.join(ADDON_DIR, "lib")
-if not os.path.exists(LIB_DIR):
-    os.makedirs(LIB_DIR)
-
-# 将 lib 添加到 sys.path
-if LIB_DIR not in sys.path:
-    sys.path.insert(0, LIB_DIR)
 
 # 检查 PySide6 是否可用
 def check_pyside6_availability():
+    """检查PySide6是否可用，只使用系统已安装的版本"""
     try:
         import PySide6
+        pyside6_path = os.path.dirname(PySide6.__file__)
+        print(f"✅ 找到系统PySide6: {pyside6_path}")
         return True, None
     except ImportError as e:
+        print(f"❌ 系统没有PySide6: {e}")
         return False, str(e)
 
+# 检查系统是否有PySide6
 PYSDIE6_AVAILABLE, PYSDIE6_ERROR = check_pyside6_availability()
 
 # 重启标记 - 用于跟踪是否需要重启
@@ -1166,16 +1164,23 @@ def unregister_qt_quick3d_properties():
 class InstallPySide6Operator(bpy.types.Operator):
     bl_idname = "qt_quick3d.install_pyside"
     bl_label = "Install PySide6"
-    bl_description = "Install PySide6 to the addon's lib directory"
+    bl_description = "Install PySide6 system-wide using pip"
     
     def execute(self, context):
+        global PYSDIE6_AVAILABLE, PYSDIE6_ERROR, RESTART_NEEDED
+        
         try:
-            # 显示进度信息
-            self.report({'INFO'}, "Starting PySide6 installation...")
+            # 检查是否已经有系统安装的PySide6
+            if PYSDIE6_AVAILABLE:
+                self.report({'INFO'}, "PySide6 is already available from system installation. No need to install.")
+                return {'FINISHED'}
             
-            # 使用 Blender 的 Python 执行 pip 安装到 lib 文件夹
+            # 显示进度信息
+            self.report({'INFO'}, "Starting PySide6 system installation...")
+            
+            # 使用 Blender 的 Python 执行 pip 系统级安装
             python_exe = sys.executable
-            cmd = [python_exe, "-m", "pip", "install", "PySide6", "--target", LIB_DIR]
+            cmd = [python_exe, "-m", "pip", "install", "PySide6"]
             
             # 执行安装
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -1184,7 +1189,6 @@ class InstallPySide6Operator(bpy.types.Operator):
                 self.report({'INFO'}, "PySide6 installed successfully! Please restart Blender.")
                 
                 # 更新状态
-                global PYSDIE6_AVAILABLE, PYSDIE6_ERROR, RESTART_NEEDED
                 PYSDIE6_AVAILABLE, PYSDIE6_ERROR = check_pyside6_availability()
                 RESTART_NEEDED = True
                 
@@ -1278,7 +1282,7 @@ class QtQuick3DAddonPreferences(AddonPreferences):
         layout.label(text="Dependencies Status:")
         
         if PYSDIE6_AVAILABLE:
-            layout.label(text="✓ PySide6: Installed and Ready")
+            layout.label(text="✓ PySide6: System Installation (Ready)")
             
             # 显示重启按钮（如果刚安装完成）
             if self.restart_needed:
@@ -1299,7 +1303,7 @@ class QtQuick3DAddonPreferences(AddonPreferences):
             box = layout.box()
             box.label(text="Installation Notes:")
             box.label(text="• PySide6 is required for Qt Quick3D functionality")
-            box.label(text="• Click 'Install PySide6' to install automatically")
+            box.label(text="• Click 'Install PySide6' to install system-wide")
             box.label(text="• Restart Blender after installation")
         
         # 模块状态
@@ -2517,27 +2521,29 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     
-    # 注册渲染引擎
-    if MODULES_AVAILABLE:
-        render_engine.register()
-        print("✓ Qt Quick3D plugin registered successfully")
-        
-        # 自动设置Quick3D渲染引擎
-        try:
-            # 延迟执行，确保Blender完全初始化
-            bpy.app.timers.register(auto_set_render_engine, first_interval=0.1)
-            print("✓ Auto-set render engine timer scheduled")
-        except Exception as e:
-            print(f"⚠️  Failed to schedule auto-set render engine: {e}")
-    else:
-        print("✗ Qt Quick3D plugin registration incomplete")
-        if not PYSDIE6_AVAILABLE:
-            print("  - PySide6 not available")
+    # 注册渲染引擎 - 暂时注释掉，以后再实现
+    # if MODULES_AVAILABLE:
+    #     render_engine.register()
+    #     print("✓ Qt Quick3D plugin registered successfully")
+    #     
+    #     # 自动设置Quick3D渲染引擎
+    #     try:
+    #         # 延迟执行，确保Blender完全初始化
+    #         bpy.app.timers.register(auto_set_render_engine, first_interval=0.1)
+    #         print("✓ Auto-set render engine timer scheduled")
+    #     except Exception as e:
+    #         print(f"⚠️  Failed to schedule auto-set render engine: {e}")
+    # else:
+    #     print("✗ Qt Quick3D plugin registration incomplete")
+    #     if not PYSDIE6_AVAILABLE:
+    #         print("  - PySide6 not available")
+    
+    print("✓ Qt Quick3D plugin registered successfully (render engine disabled)")
 
 def unregister():
-    # 注销渲染引擎
-    if MODULES_AVAILABLE:
-        render_engine.unregister()
+    # 注销渲染引擎 - 暂时注释掉，以后再实现
+    # if MODULES_AVAILABLE:
+    #     render_engine.unregister()
     
     # 注销主插件类
     for cls in reversed(classes):
@@ -2546,43 +2552,44 @@ def unregister():
     # 注销场景属性
     unregister_scene_properties()
     
-    # 清理场景加载处理器
-    try:
-        if set_render_engine_on_load in bpy.app.handlers.load_post:
-            bpy.app.handlers.load_post.remove(set_render_engine_on_load)
-            print("✓ 清理场景加载后处理器")
-    except Exception as e:
-        print(f"⚠️  清理场景加载后处理器失败: {e}")
+    # 清理场景加载处理器 - 暂时注释掉，以后再实现
+    # try:
+    #     if set_render_engine_on_load in bpy.app.handlers.load_post:
+    #         bpy.app.handlers.load_post.remove(set_render_engine_on_load)
+    #         print("✓ 清理场景加载后处理器")
+    # except Exception as e:
+    #     print(f"⚠️  清理场景加载后处理器失败: {e}")
     
     print("Qt Quick3D plugin unregistered")
 
-def auto_set_render_engine():
-    """自动设置Quick3D渲染引擎"""
-    try:
-        # 获取所有场景
-        for scene in bpy.data.scenes:
-            if scene.render.engine != 'QUICK3D':
-                scene.render.engine = 'QUICK3D'
-                print(f"✓ 自动设置场景 '{scene.name}' 的渲染引擎为 Quick3D")
-        
-        # 设置新创建的场景也使用Quick3D引擎
-        bpy.app.handlers.load_post.append(set_render_engine_on_load)
-        print("✓ 添加场景加载后处理器")
-        
-        return None  # 停止定时器
-        
-    except Exception as e:
-        print(f"⚠️  自动设置渲染引擎失败: {e}")
-        return None  # 停止定时器
+# 自动设置渲染引擎相关函数 - 暂时注释掉，以后再实现
+# def auto_set_render_engine():
+#     """自动设置Quick3D渲染引擎"""
+#     try:
+#         # 获取所有场景
+#         for scene in bpy.data.scenes:
+#             if scene.render.engine != 'QUICK3D':
+#                 scene.render.engine = 'QUICK3D'
+#                 print(f"✓ 自动设置场景 '{scene.name}' 的渲染引擎为 Quick3D")
+#         
+#         # 设置新创建的场景也使用Quick3D引擎
+#         bpy.app.handlers.load_post.append(set_render_engine_on_load)
+#         print("✓ 添加场景加载后处理器")
+#         
+#         return None  # 停止定时器
+#         
+#     except Exception as e:
+#         print(f"⚠️  自动设置渲染引擎失败: {e}")
+#         return None  # 停止定时器
 
-def set_render_engine_on_load(scene):
-    """在场景加载后设置渲染引擎"""
-    try:
-        if scene.render.engine != 'QUICK3D':
-            scene.render.engine = 'QUICK3D'
-            print(f"✓ 场景加载后自动设置渲染引擎为 Quick3D")
-    except Exception as e:
-        print(f"⚠️  场景加载后设置渲染引擎失败: {e}")
+# def set_render_engine_on_load(scene):
+#     """在场景加载后设置渲染引擎"""
+#     try:
+#         if scene.render.engine != 'QUICK3D':
+#             scene.render.engine = 'QUICK3D'
+#             print(f"✓ 场景加载后自动设置渲染引擎为 Quick3D")
+#     except Exception as e:
+#         print(f"⚠️  场景加载后设置渲染引擎失败: {e}")
 
 if __name__ == "__main__":
     register()

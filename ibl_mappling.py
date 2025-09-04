@@ -402,10 +402,11 @@ def copy_world_image_to_balsam_output(image_path: str, output_base_dir: str = No
         
         # 获取输出基础目录
         if output_base_dir is None:
-            output_base_dir = get_balsam_output_base_dir()+"/maps"
-            if not output_base_dir:
+            base = get_balsam_output_base_dir()
+            if not base:
                 print("❌ 无法获取Balsam输出基础目录")
                 return None
+            output_base_dir = os.path.join(base, "maps")
         
         # 确保输出目录存在
         os.makedirs(output_base_dir, exist_ok=True)
@@ -467,10 +468,11 @@ def copy_all_world_images_to_balsam_output(output_base_dir: str = None) -> Dict[
         
         # 获取输出基础目录
         if output_base_dir is None:
-            output_base_dir = get_balsam_output_base_dir()+"/maps"
-            if not output_base_dir:
+            base = get_balsam_output_base_dir()
+            if not base:
                 print("❌ 无法获取Balsam输出基础目录")
                 return result
+            output_base_dir = os.path.join(base, "maps")
         
         result['output_base_dir'] = output_base_dir
         

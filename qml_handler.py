@@ -445,6 +445,7 @@ class QMLHandler:
 import QtQuick
 import QtQuick3D
 import QtQuick3D.Helpers
+import QtQuick.Timeline
 
 Window {{
     visible: true
