@@ -263,6 +263,9 @@ def register_qt_quick3d_properties():
     
     # ExtendedSceneEnvironment高级属性
     register_extended_scene_environment_properties()
+    
+    # WASD控制器属性
+    register_wasd_controller_properties()
 
 def register_window_properties():
     """注册窗口和View3D尺寸相关属性"""
@@ -892,6 +895,163 @@ def register_extended_scene_environment_properties():
         max=1.0
     )
 
+def register_wasd_controller_properties():
+    """注册WASD控制器相关属性"""
+    from bpy.props import IntProperty, FloatProperty, BoolProperty, EnumProperty
+    
+    # WASD控制器开关
+    bpy.types.Scene.qtquick3d_wasd_enabled = BoolProperty(
+        name="Enable WASD Controller",
+        description="Enable WASD controller for camera navigation",
+        default=True
+    )
+    
+    # 速度设置
+    bpy.types.Scene.qtquick3d_wasd_speed = FloatProperty(
+        name="Speed",
+        description="Base speed of navigation",
+        default=1.0,
+        min=0.1,
+        max=10.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_forward_speed = FloatProperty(
+        name="Forward Speed",
+        description="Speed when moving forward",
+        default=5.0,
+        min=0.1,
+        max=50.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_back_speed = FloatProperty(
+        name="Back Speed",
+        description="Speed when moving backward",
+        default=5.0,
+        min=0.1,
+        max=50.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_left_speed = FloatProperty(
+        name="Left Speed",
+        description="Speed when moving left",
+        default=5.0,
+        min=0.1,
+        max=50.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_right_speed = FloatProperty(
+        name="Right Speed",
+        description="Speed when moving right",
+        default=5.0,
+        min=0.1,
+        max=50.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_up_speed = FloatProperty(
+        name="Up Speed",
+        description="Speed when moving up",
+        default=5.0,
+        min=0.1,
+        max=50.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_down_speed = FloatProperty(
+        name="Down Speed",
+        description="Speed when moving down",
+        default=5.0,
+        min=0.1,
+        max=50.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_shift_speed = FloatProperty(
+        name="Shift Speed",
+        description="Speed multiplier when shift key is pressed",
+        default=3.0,
+        min=0.1,
+        max=10.0
+    )
+    
+    # 鼠标控制设置
+    bpy.types.Scene.qtquick3d_wasd_mouse_enabled = BoolProperty(
+        name="Mouse Enabled",
+        description="Enable mouse controls",
+        default=True
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_x_speed = FloatProperty(
+        name="X Speed",
+        description="Speed when mouse moves along X axis",
+        default=0.1,
+        min=0.01,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_y_speed = FloatProperty(
+        name="Y Speed",
+        description="Speed when mouse moves along Y axis",
+        default=0.1,
+        min=0.01,
+        max=1.0
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_x_invert = BoolProperty(
+        name="X Invert",
+        description="Invert X-axis controls",
+        default=False
+    )
+    
+    bpy.types.Scene.qtquick3d_wasd_y_invert = BoolProperty(
+        name="Y Invert",
+        description="Invert Y-axis controls",
+        default=True
+    )
+    
+    # 键盘控制设置
+    bpy.types.Scene.qtquick3d_wasd_keys_enabled = BoolProperty(
+        name="Keys Enabled",
+        description="Enable key controls",
+        default=True
+    )
+    
+    # 接受的按钮设置
+    bpy.types.Scene.qtquick3d_wasd_accepted_buttons = EnumProperty(
+        name="Accepted Buttons",
+        description="Specifies the buttons accepted by the controller",
+        items=[
+            ("LEFT", "Left Button", "Left mouse button only"),
+            ("RIGHT", "Right Button", "Right mouse button only"),
+            ("MIDDLE", "Middle Button", "Middle mouse button only"),
+            ("LEFT_RIGHT", "Left + Right", "Left and right mouse buttons"),
+            ("ALL", "All Buttons", "All mouse buttons")
+        ],
+        default="LEFT"
+    )
+
+def unregister_wasd_controller_properties():
+    """注销WASD控制器相关属性"""
+    # WASD控制器开关
+    del bpy.types.Scene.qtquick3d_wasd_enabled
+    
+    # 速度设置
+    del bpy.types.Scene.qtquick3d_wasd_speed
+    del bpy.types.Scene.qtquick3d_wasd_forward_speed
+    del bpy.types.Scene.qtquick3d_wasd_back_speed
+    del bpy.types.Scene.qtquick3d_wasd_left_speed
+    del bpy.types.Scene.qtquick3d_wasd_right_speed
+    del bpy.types.Scene.qtquick3d_wasd_up_speed
+    del bpy.types.Scene.qtquick3d_wasd_down_speed
+    del bpy.types.Scene.qtquick3d_wasd_shift_speed
+    
+    # 鼠标控制设置
+    del bpy.types.Scene.qtquick3d_wasd_mouse_enabled
+    del bpy.types.Scene.qtquick3d_wasd_x_speed
+    del bpy.types.Scene.qtquick3d_wasd_y_speed
+    del bpy.types.Scene.qtquick3d_wasd_x_invert
+    del bpy.types.Scene.qtquick3d_wasd_y_invert
+    
+    # 键盘控制设置
+    del bpy.types.Scene.qtquick3d_wasd_keys_enabled
+    del bpy.types.Scene.qtquick3d_wasd_accepted_buttons
 
 def unregister_scene_properties():
     """注销场景属性"""
@@ -998,6 +1158,9 @@ def unregister_qt_quick3d_properties():
     del bpy.types.Scene.qtquick3d_vignette_color
     del bpy.types.Scene.qtquick3d_vignette_radius
     del bpy.types.Scene.qtquick3d_vignette_strength
+    
+    # WASD控制器属性
+    unregister_wasd_controller_properties()
 
 # 安装 PySide6 操作符
 class InstallPySide6Operator(bpy.types.Operator):
@@ -1368,6 +1531,53 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
                 row = other_box.row(align=True)
                 row.prop(scene, "qtquick3d_dithering_enabled", text="Dithering")
                 row.prop(scene, "qtquick3d_fxaa_enabled", text="FXAA")
+            
+            # WASD控制器设置
+            wasd_box = scene_settings_box.box()
+            wasd_box.label(text="WASD Controller:")
+            row = wasd_box.row(align=True)
+            row.prop(scene, "qtquick3d_wasd_enabled", text="Enable WASD Controller")
+            
+            if getattr(scene, "qtquick3d_wasd_enabled", True):
+                # 基础速度设置
+                speed_box = wasd_box.box()
+                speed_box.label(text="Speed Settings:")
+                row = speed_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_speed", text="Base Speed")
+                row.prop(scene, "qtquick3d_wasd_shift_speed", text="Shift Speed")
+                
+                # 方向速度设置
+                direction_box = wasd_box.box()
+                direction_box.label(text="Direction Speeds:")
+                row = direction_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_forward_speed", text="Forward")
+                row.prop(scene, "qtquick3d_wasd_back_speed", text="Back")
+                row = direction_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_left_speed", text="Left")
+                row.prop(scene, "qtquick3d_wasd_right_speed", text="Right")
+                row = direction_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_up_speed", text="Up")
+                row.prop(scene, "qtquick3d_wasd_down_speed", text="Down")
+                
+                # 鼠标控制设置
+                mouse_box = wasd_box.box()
+                mouse_box.label(text="Mouse Controls:")
+                row = mouse_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_mouse_enabled", text="Mouse Enabled")
+                row = mouse_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_x_speed", text="X Speed")
+                row.prop(scene, "qtquick3d_wasd_y_speed", text="Y Speed")
+                row = mouse_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_x_invert", text="X Invert")
+                row.prop(scene, "qtquick3d_wasd_y_invert", text="Y Invert")
+                
+                # 键盘控制设置
+                keyboard_box = wasd_box.box()
+                keyboard_box.label(text="Keyboard Controls:")
+                row = keyboard_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_keys_enabled", text="Keys Enabled")
+                row = keyboard_box.row(align=True)
+                row.prop(scene, "qtquick3d_wasd_accepted_buttons", text="Accepted Buttons")
 
 
         # 显示一些状态信息

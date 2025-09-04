@@ -233,6 +233,24 @@ class QMLHandler:
             settings['vignette_radius'] = getattr(scene, 'qtquick3d_vignette_radius', 0.5)
             settings['vignette_strength'] = getattr(scene, 'qtquick3d_vignette_strength', 0.0)
             
+            # WASD控制器设置
+            settings['wasd_enabled'] = getattr(scene, 'qtquick3d_wasd_enabled', True)
+            settings['wasd_speed'] = getattr(scene, 'qtquick3d_wasd_speed', 1.0)
+            settings['wasd_forward_speed'] = getattr(scene, 'qtquick3d_wasd_forward_speed', 5.0)
+            settings['wasd_back_speed'] = getattr(scene, 'qtquick3d_wasd_back_speed', 5.0)
+            settings['wasd_left_speed'] = getattr(scene, 'qtquick3d_wasd_left_speed', 5.0)
+            settings['wasd_right_speed'] = getattr(scene, 'qtquick3d_wasd_right_speed', 5.0)
+            settings['wasd_up_speed'] = getattr(scene, 'qtquick3d_wasd_up_speed', 5.0)
+            settings['wasd_down_speed'] = getattr(scene, 'qtquick3d_wasd_down_speed', 5.0)
+            settings['wasd_shift_speed'] = getattr(scene, 'qtquick3d_wasd_shift_speed', 3.0)
+            settings['wasd_mouse_enabled'] = getattr(scene, 'qtquick3d_wasd_mouse_enabled', True)
+            settings['wasd_x_speed'] = getattr(scene, 'qtquick3d_wasd_x_speed', 0.1)
+            settings['wasd_y_speed'] = getattr(scene, 'qtquick3d_wasd_y_speed', 0.1)
+            settings['wasd_x_invert'] = getattr(scene, 'qtquick3d_wasd_x_invert', False)
+            settings['wasd_y_invert'] = getattr(scene, 'qtquick3d_wasd_y_invert', True)
+            settings['wasd_keys_enabled'] = getattr(scene, 'qtquick3d_wasd_keys_enabled', True)
+            settings['wasd_accepted_buttons'] = getattr(scene, 'qtquick3d_wasd_accepted_buttons', 'LEFT')
+            
             self.scene_settings = settings
             print(f"✅ 成功读取场景属性，共 {len(settings)} 个设置")
             return settings
@@ -272,7 +290,24 @@ class QMLHandler:
             'lens_flare_enabled': False,
             'lut_enabled': False,
             'vignette_enabled': False,
-            'vignette_strength': 0.0
+            'vignette_strength': 0.0,
+            # WASD控制器默认设置
+            'wasd_enabled': True,
+            'wasd_speed': 1.0,
+            'wasd_forward_speed': 5.0,
+            'wasd_back_speed': 5.0,
+            'wasd_left_speed': 5.0,
+            'wasd_right_speed': 5.0,
+            'wasd_up_speed': 5.0,
+            'wasd_down_speed': 5.0,
+            'wasd_shift_speed': 3.0,
+            'wasd_mouse_enabled': True,
+            'wasd_x_speed': 0.1,
+            'wasd_y_speed': 0.1,
+            'wasd_x_invert': False,
+            'wasd_y_invert': True,
+            'wasd_keys_enabled': True,
+            'wasd_accepted_buttons': 'LEFT'
         }
     
     def convert_color_to_qml(self, color_tuple):
@@ -385,9 +420,8 @@ class QMLHandler:
             if current_camera and is_camera_name_ascii:
                 current_camera_name = current_camera.name.lower()
                 wasd_controller_camera = current_camera_name + "_camera"
-                wasd_controller_qml = f"WasdController {{controlledObject: {wasd_controller_camera}}}"
+                wasd_controller_qml = self.generate_wasd_controller_qml(wasd_controller_camera, settings)
             else:
-                
                 wasd_controller_qml = ""
             # 生成SceneEnvironment QML字符串
             scene_environment_qml = self.generate_scene_environment_qml(settings)
@@ -683,6 +717,78 @@ Window {{
             print(f"❌ 生成ExtendedSceneEnvironment QML失败: {e}")
             
             return f"clearColor: \"{self.convert_color_to_qml(settings['clear_color'])}\"\n    backgroundMode: {self.get_background_mode_qml(settings['background_mode'])}\n    antialiasingMode: {self.get_antialiasing_mode_qml(settings['antialiasing_mode'])}\n    antialiasingQuality: {self.get_antialiasing_quality_qml(settings['antialiasing_quality'])}"
+    
+    def generate_wasd_controller_qml(self, controlled_object, settings):
+        """生成WASD控制器的QML字符串"""
+        try:
+            # 检查WASD控制器是否启用
+            if not settings.get('wasd_enabled', True):
+                return ""
+            
+            qml_parts = []
+            
+            # 基本属性
+            qml_parts.append(f"controlledObject: {controlled_object}")
+            
+            # 速度设置
+            if settings.get('wasd_speed', 1.0) != 1.0:
+                qml_parts.append(f"speed: {settings['wasd_speed']}")
+            
+            # 方向速度设置
+            if settings.get('wasd_forward_speed', 5.0) != 5.0:
+                qml_parts.append(f"forwardSpeed: {settings['wasd_forward_speed']}")
+            if settings.get('wasd_back_speed', 5.0) != 5.0:
+                qml_parts.append(f"backSpeed: {settings['wasd_back_speed']}")
+            if settings.get('wasd_left_speed', 5.0) != 5.0:
+                qml_parts.append(f"leftSpeed: {settings['wasd_left_speed']}")
+            if settings.get('wasd_right_speed', 5.0) != 5.0:
+                qml_parts.append(f"rightSpeed: {settings['wasd_right_speed']}")
+            if settings.get('wasd_up_speed', 5.0) != 5.0:
+                qml_parts.append(f"upSpeed: {settings['wasd_up_speed']}")
+            if settings.get('wasd_down_speed', 5.0) != 5.0:
+                qml_parts.append(f"downSpeed: {settings['wasd_down_speed']}")
+            if settings.get('wasd_shift_speed', 3.0) != 3.0:
+                qml_parts.append(f"shiftSpeed: {settings['wasd_shift_speed']}")
+            
+            # 鼠标控制设置
+            if not settings.get('wasd_mouse_enabled', True):
+                qml_parts.append(f"mouseEnabled: false")
+            else:
+                if settings.get('wasd_x_speed', 0.1) != 0.1:
+                    qml_parts.append(f"xSpeed: {settings['wasd_x_speed']}")
+                if settings.get('wasd_y_speed', 0.1) != 0.1:
+                    qml_parts.append(f"ySpeed: {settings['wasd_y_speed']}")
+                if settings.get('wasd_x_invert', False):
+                    qml_parts.append(f"xInvert: true")
+                if not settings.get('wasd_y_invert', True):
+                    qml_parts.append(f"yInvert: false")
+            
+            # 键盘控制设置
+            if not settings.get('wasd_keys_enabled', True):
+                qml_parts.append(f"keysEnabled: false")
+            
+            # 接受的按钮设置
+            accepted_buttons = settings.get('wasd_accepted_buttons', 'LEFT')
+            if accepted_buttons != 'LEFT':
+                button_mapping = {
+                    'LEFT': 'Qt.LeftButton',
+                    'RIGHT': 'Qt.RightButton', 
+                    'MIDDLE': 'Qt.MiddleButton',
+                    'LEFT_RIGHT': 'Qt.LeftButton | Qt.RightButton',
+                    'ALL': 'Qt.LeftButton | Qt.RightButton | Qt.MiddleButton'
+                }
+                qml_parts.append(f"acceptedButtons: {button_mapping.get(accepted_buttons, 'Qt.LeftButton')}")
+            
+            # 组装QML
+            if qml_parts:
+                qml_content = "\n    ".join(qml_parts)
+                return f"WasdController {{\n    {qml_content}\n}}"
+            else:
+                return f"WasdController {{ controlledObject: {controlled_object} }}"
+                
+        except Exception as e:
+            print(f"❌ 生成WASD控制器QML失败: {e}")
+            return f"WasdController {{ controlledObject: {controlled_object} }}"
     
     def get_assembled_qml(self):
         """获取组装好的QML内容"""
