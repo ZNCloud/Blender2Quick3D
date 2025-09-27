@@ -9,6 +9,7 @@ import os
 import subprocess
 import shutil
 from pathlib import Path
+from . import path_manager
 
 # 全局变量定义 - 确保所有模块使用相同的路径
 QML_OUTPUT_DIR = None
@@ -62,7 +63,7 @@ class BalsamGLTFToQMLConverter:
         """设置环境"""
         # 使用全局变量确保路径一致
         self.output_base_dir = get_output_base_dir()
-        self.qml_output_dir = get_qml_output_dir()
+        self.qml_output_dir = path_manager.get_qml_output_base_dir()
 
         # 设置当前Qt可读的资源目录
         # 这里可以设置Qt相关的环境变量，确保QML引擎能找到输出目录
@@ -74,7 +75,8 @@ class BalsamGLTFToQMLConverter:
         # 查找balsam可执行文件
         print("🔍 开始查找balsam可执行文件...")
         old_path = self.balsam_path
-        self.balsam_path = self._find_balsam_executable()
+        # 优先使用用户选择的balsam路径
+        self.balsam_path = path_manager.get_selected_balsam_path()
         print(f"🔍 最终选择的balsam路径: {self.balsam_path}")
         if old_path != self.balsam_path:
             print(f"🔍 路径已更改: {old_path} -> {self.balsam_path}")
@@ -445,16 +447,12 @@ class BalsamGLTFToQMLConverter:
         """调用balsam转换器"""
         # 优先使用全局选定的balsam路径
         try:
-            import sys
-            addon_name = 'Blender2Quick3D'
-            if addon_name in sys.modules:
-                addon_main = sys.modules[addon_name]
-                selected_path = getattr(addon_main, 'SELECTED_BALSAM_PATH', None)
-                if selected_path and os.path.exists(selected_path):
-                    print(f"🎯 使用全局选定的balsam版本: {selected_path}")
-                    self.balsam_path = selected_path
-                else:
-                    print(f"⚠️ 全局选定路径无效，使用默认: {self.balsam_path}")
+            selected_path = path_manager.get_selected_balsam_path()
+            if selected_path and os.path.exists(selected_path):
+                print(f"🎯 使用全局选定的balsam版本: {selected_path}")
+                self.balsam_path = selected_path
+            else:
+                print(f"⚠️ 全局选定路径无效，使用默认: {self.balsam_path}")
         except Exception as e:
             print(f"⚠️ 获取全局选定路径失败，使用默认: {e}")
         
@@ -472,7 +470,7 @@ class BalsamGLTFToQMLConverter:
             print(f"🎯 完整路径: {self.balsam_path}")
             
             # 使用系统环境变量（不再使用lib目录）
-            env = self._get_qt_environment_for_path(self.balsam_path)
+            env = path_manager.get_qt_environment_for_path(self.balsam_path)
             
             print(f"🔧 环境变量设置:")
             if 'PYTHONPATH' in env:
@@ -668,9 +666,9 @@ class BalsamGLTFToQMLConverter:
 def get_current_output_status():
     """获取当前输出路径状态"""
     return {
-        'qml_output_dir': get_qml_output_dir(),
+        'qml_output_dir': path_manager.get_qml_output_base_dir(),
         'output_base_dir': get_output_base_dir(),
-        'qml_output_exists': os.path.exists(get_qml_output_dir()),
+        'qml_output_exists': os.path.exists(path_manager.get_qml_output_base_dir()),
         'output_base_exists': os.path.exists(get_output_base_dir())
     }
 

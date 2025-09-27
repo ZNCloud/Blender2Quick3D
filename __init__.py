@@ -17,8 +17,9 @@ import subprocess
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Panel, Operator, AddonPreferences
 
-# 定义插件目录
-ADDON_DIR = os.path.dirname(__file__)
+# 导入新的模块化组件
+from . import path_manager
+from . import scene_environment
 
 # 检查 PySide6 是否可用
 def check_pyside6_availability():
@@ -32,6 +33,194 @@ def check_pyside6_availability():
         print(f"❌ 系统没有PySide6: {e}")
         return False, str(e)
 
+def find_all_pyside6_installations():
+    """查找所有可用的PySide6安装位置，按优先级排序"""
+    import site
+    import sys
+    
+    installations = []
+    
+    # 获取所有可能的site-packages路径
+    site_packages_paths = site.getsitepackages()
+    user_site = site.getusersitepackages()
+    
+    # 添加Blender特定的site-packages路径
+    blender_site_packages = []
+    if hasattr(sys, 'executable') and 'blender' in sys.executable.lower():
+        # Blender的site-packages通常在scripts/modules/下
+        blender_scripts = os.path.dirname(sys.executable)
+        blender_modules = os.path.join(blender_scripts, '..', 'scripts', 'modules')
+        blender_modules = os.path.abspath(blender_modules)
+        if os.path.exists(blender_modules):
+            blender_site_packages.append(blender_modules)
+    
+    # 检查每个可能的路径
+    all_paths = []
+    
+    # 1. 系统site-packages (最高优先级)
+    for site_path in site_packages_paths:
+        pyside6_path = os.path.join(site_path, 'PySide6')
+        if os.path.exists(pyside6_path):
+            all_paths.append({
+                'path': pyside6_path,
+                'type': 'system',
+                'priority': 1,
+                'description': f'System site-packages: {site_path}'
+            })
+    
+    # 2. 用户site-packages (中等优先级)
+    if user_site:
+        pyside6_path = os.path.join(user_site, 'PySide6')
+        if os.path.exists(pyside6_path):
+            all_paths.append({
+                'path': pyside6_path,
+                'type': 'user',
+                'priority': 2,
+                'description': f'User site-packages: {user_site}'
+            })
+    
+    # 3. Blender site-packages (最低优先级)
+    for blender_path in blender_site_packages:
+        pyside6_path = os.path.join(blender_path, 'PySide6')
+        if os.path.exists(pyside6_path):
+            all_paths.append({
+                'path': pyside6_path,
+                'type': 'blender',
+                'priority': 3,
+                'description': f'Blender site-packages: {blender_path}'
+            })
+    
+    # 按优先级排序
+    all_paths.sort(key=lambda x: x['priority'])
+    
+    # 验证每个安装并获取版本信息
+    for install in all_paths:
+        try:
+            # 临时添加到sys.path来导入
+            install_dir = os.path.dirname(install['path'])
+            if install_dir not in sys.path:
+                sys.path.insert(0, install_dir)
+            
+            # 尝试导入并获取版本
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("PySide6", os.path.join(install['path'], '__init__.py'))
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                version = getattr(module, '__version__', 'Unknown')
+                
+                install['version'] = version
+                install['valid'] = True
+                
+                print(f"✅ 找到PySide6安装: {install['description']}")
+                print(f"   版本: {version}")
+                print(f"   路径: {install['path']}")
+                
+            else:
+                install['version'] = 'Unknown'
+                install['valid'] = False
+                
+        except Exception as e:
+            install['version'] = 'Unknown'
+            install['valid'] = False
+            install['error'] = str(e)
+            print(f"⚠️ PySide6安装无效: {install['description']} - {e}")
+    
+    return all_paths
+
+def get_pyside6_installation_info():
+    """获取PySide6的详细安装信息，支持多个安装位置"""
+    try:
+        # 首先尝试直接导入（当前使用的版本）
+        import PySide6
+        current_path = os.path.dirname(PySide6.__file__)
+        current_version = getattr(PySide6, '__version__', 'Unknown')
+        
+        # 查找所有可用的安装
+        all_installations = path_manager.find_all_pyside6_installations()
+        
+        # 确定当前使用的安装
+        current_install = None
+        for install in all_installations:
+            try:
+                # 尝试使用samefile，如果失败则比较标准化路径
+                if os.path.samefile(install['path'], current_path):
+                    current_install = install
+                    break
+            except (OSError, FileNotFoundError):
+                # 如果samefile失败，比较标准化路径
+                if os.path.normpath(install['path']) == os.path.normpath(current_path):
+                    current_install = install
+                    break
+        
+        # 如果没有找到匹配的安装，创建一个临时的
+        if not current_install:
+            current_install = {
+                'path': current_path,
+                'type': 'unknown',
+                'priority': 0,
+                'description': 'Current import path',
+                'version': current_version,
+                'valid': True
+            }
+        
+        # 按优先级排序所有安装
+        valid_installations = [inst for inst in all_installations if inst.get('valid', False)]
+        valid_installations.sort(key=lambda x: x['priority'])
+        
+        info = {
+            'available': True,
+            'current': current_install,
+            'all_installations': valid_installations,
+            'best_installation': valid_installations[0] if valid_installations else current_install,
+            'error': None
+        }
+        
+        print(f"PySide6 Info:")
+        print(f"  当前使用: {current_install['description']}")
+        print(f"  版本: {current_install['version']}")
+        print(f"  路径: {current_install['path']}")
+        if valid_installations:
+            print(f"  推荐使用: {valid_installations[0]['description']}")
+        
+        return info
+        
+    except ImportError as e:
+        error_msg = str(e)
+        print(f"PySide6 not available: {error_msg}")
+        return {
+            'available': False,
+            'current': None,
+            'all_installations': [],
+            'best_installation': None,
+            'error': error_msg
+        }
+
+def get_python_executable_info():
+    """获取Python可执行文件和路径信息"""
+    import sys
+    import site
+    
+    info = {
+        'executable': sys.executable,
+        'version': sys.version,
+        'site_packages': site.getsitepackages(),
+        'user_site': site.getusersitepackages(),
+        'prefix': sys.prefix,
+        'base_prefix': getattr(sys, 'base_prefix', sys.prefix),
+        'is_virtual_env': hasattr(sys, 'real_prefix') or 
+                         (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+    }
+    
+    print(f"Python Info:")
+    print(f"  Executable: {info['executable']}")
+    print(f"  Version: {info['version']}")
+    print(f"  Site packages: {info['site_packages']}")
+    print(f"  User site: {info['user_site']}")
+    print(f"  Prefix: {info['prefix']}")
+    
+    return info
+
 # 检查系统是否有PySide6
 PYSDIE6_AVAILABLE, PYSDIE6_ERROR = check_pyside6_availability()
 
@@ -41,6 +230,7 @@ RESTART_NEEDED = False
 # 全局变量，用于保持PySide6窗口引用
 _qml_window = None
 _qml_app = None
+SELECTED_BALSAM_PATH = None
 
 # 导入我们的Qt集成模块
 try:
@@ -58,43 +248,10 @@ except ImportError as e:
     qt_quick3d_integration = None
     render_engine = None
 
-# 供下拉框与转换器共享：Qt安装中的balsam路径映射
-BALSAM_PATH_MAP = {}
-BALSAM_CACHE_FILE = os.path.join(os.path.dirname(__file__), "balsam_version.txt")
-BALSAM_CACHE_LOADED = False
-# 全局变量：最终执行的balsam路径
-SELECTED_BALSAM_PATH = None
+# Balsam路径管理 - 使用path_manager模块
+# 这些变量将在需要时从path_manager获取
 
-def _scan_qt_balsam_paths():
-    """扫描Qt安装目录，查找bin下的balsam.exe - 简化版本避免卡死"""
-    candidates = []
-    try:
-        qt_root = r"C:\Qt"
-        if not os.path.exists(qt_root):
-            return candidates
-            
-        # 只扫描第一级版本目录
-        for version_dir in os.listdir(qt_root):
-            version_path = os.path.join(qt_root, version_dir)
-            if not os.path.isdir(version_path):
-                continue
-                
-            # 在版本目录下查找mingw和msvc目录
-            for toolchain_dir in os.listdir(version_path):
-                toolchain_path = os.path.join(version_path, toolchain_dir)
-                if not os.path.isdir(toolchain_path):
-                    continue
-                    
-                # 只检查mingw和msvc目录
-                if 'mingw' in toolchain_dir.lower() or 'msvc' in toolchain_dir.lower():
-                    bin_path = os.path.join(toolchain_path, 'bin')
-                    balsam_exe = os.path.join(bin_path, 'balsam.exe')
-                    if os.path.exists(balsam_exe):
-                        candidates.append(balsam_exe)
-                        
-    except Exception as e:
-        print(f"扫描Qt目录失败: {e}")
-    return candidates
+# _scan_qt_balsam_paths函数已移至path_manager.py模块
 
 def _label_for_balsam_path(path_str: str) -> str:
     """生成友好标签，例如 6.5.3-mingw_64 或 6.5.3-msvc2019_64"""
@@ -123,90 +280,15 @@ def _label_for_balsam_path(path_str: str) -> str:
     except Exception:
         return os.path.basename(path_str)
 
-def _load_balsam_cache():
-    """从缓存文件加载balsam路径映射"""
-    global BALSAM_PATH_MAP, BALSAM_CACHE_LOADED
-    
-    # 如果已经加载过，直接返回
-    if BALSAM_CACHE_LOADED:
-        return len(BALSAM_PATH_MAP) > 0
-    
-    BALSAM_PATH_MAP = {}
-    
-    if not os.path.exists(BALSAM_CACHE_FILE):
-        print(f"❌ 缓存文件不存在: {BALSAM_CACHE_FILE}")
-        BALSAM_CACHE_LOADED = True
-        return False
-        
-    try:
-        with open(BALSAM_CACHE_FILE, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            
-        for line in lines:
-            line = line.strip()
-            if '=' in line:
-                key, path = line.split('=', 1)
-                if os.path.exists(path):
-                    BALSAM_PATH_MAP[key] = path
-                    
-        print(f"✅ 从缓存加载了 {len(BALSAM_PATH_MAP)} 个balsam路径")
-        BALSAM_CACHE_LOADED = True
-        return len(BALSAM_PATH_MAP) > 0
-    except Exception as e:
-        print(f"❌ 加载balsam缓存失败: {e}")
-        BALSAM_CACHE_LOADED = True
-        return False
+# _load_balsam_cache函数已移至path_manager.py模块
 
-def _save_balsam_cache():
-    """保存balsam路径映射到缓存文件"""
-    try:
-        with open(BALSAM_CACHE_FILE, 'w', encoding='utf-8') as f:
-            for key, path in BALSAM_PATH_MAP.items():
-                f.write(f"{key}={path}\n")
-        print(f"✅ 已保存 {len(BALSAM_PATH_MAP)} 个balsam路径到缓存")
-        return True
-    except Exception as e:
-        print(f"❌ 保存balsam缓存失败: {e}")
-        return False
+# _save_balsam_cache函数已移至path_manager.py模块
 
-def _update_balsam_selection(self, context):
-    """当下拉框选择改变时更新全局balsam路径"""
-    global SELECTED_BALSAM_PATH, BALSAM_PATH_MAP
-    
-    selected = getattr(context.scene, 'balsam_version', 'AUTO')
-    print(f"🔧 下拉框选择改变: {selected}")
-    
-    if selected == 'AUTO':
-        SELECTED_BALSAM_PATH = None
-        print(f"🔧 设置为Auto模式，将自动检测balsam路径")
-    else:
-        # 确保缓存已加载
-        _load_balsam_cache()
-        chosen = BALSAM_PATH_MAP.get(selected)
-        if chosen and os.path.exists(chosen):
-            SELECTED_BALSAM_PATH = chosen
-            print(f"✅ 设置选定的balsam路径: {chosen}")
-        else:
-            SELECTED_BALSAM_PATH = None
-            print(f"❌ 选择的路径无效: {chosen}")
-    
-    # 确保系统PATH不被污染，恢复原始PATH
-    # 这里我们不做任何PATH修改，让QML窗口正常工作
+# _update_balsam_selection函数已移至path_manager.py模块
 
-def _build_balsam_enum_items(self, context):
-    """为EnumProperty提供items，并刷新全局映射。"""
-    global BALSAM_PATH_MAP
-    
-    # 只加载一次缓存
-    _load_balsam_cache()
-    
-    items = [("AUTO", "Auto", "Auto-detect from C:/Qt (prefer mingw) or PATH")]
-    for key, exe in BALSAM_PATH_MAP.items():
-        label = _label_for_balsam_path(exe)
-        items.append((key, label, exe))
-    return items
+# _build_balsam_enum_items函数已移至path_manager.py模块
 
-# 添加场景属性
+# 注册场景属性
 def register_scene_properties():
     """注册场景属性"""
     # Balsam转换器相关属性
@@ -235,930 +317,164 @@ def register_scene_properties():
     bpy.types.Scene.balsam_version = EnumProperty(
         name="Balsam Version",
         description="Choose a Qt Design Studio balsam.exe under C:/Qt or Auto",
-        items=_build_balsam_enum_items,
+        items=path_manager.build_balsam_enum_items,
         default=0,
-        update=_update_balsam_selection,
+        update=path_manager.update_balsam_selection,
     )
     
-    register_qt_quick3d_properties()
+    # 注册SceneEnvironment属性
+    scene_environment.register_scene_environment_properties()
 
-def register_qt_quick3d_properties():
-    """注册Qt Quick3D引擎相关属性"""
-    from bpy.props import IntProperty, FloatProperty, FloatVectorProperty, BoolProperty, StringProperty
-    
-    # UI控制属性
-    bpy.types.Scene.show_scene_settings = BoolProperty(
-        name="Show Scene Settings",
-        description="Show or hide SceneSettings panel",
-        default=False
-    )
-    
-    # 窗口和View3D尺寸设置
-    register_window_properties()
-    
-    # SceneEnvironment基础属性
-    register_scene_environment_properties()
-    
-    # ExtendedSceneEnvironment高级属性
-    register_extended_scene_environment_properties()
-    
-    # WASD控制器属性
-    register_wasd_controller_properties()
 
-def register_window_properties():
-    """注册窗口和View3D尺寸相关属性"""
-    from bpy.props import IntProperty
-    
-    # 窗口/View3D大小设置（统一设置，因为View3D覆盖全窗口）
-    bpy.types.Scene.qtquick3d_view3d_width = IntProperty(
-        name="Width",
-        description="Width of the window and View3D area",
-        default=1280,
-        min=400,
-        max=3840
-    )
-    
-    bpy.types.Scene.qtquick3d_view3d_height = IntProperty(
-        name="Height",
-        description="Height of the window and View3D area", 
-        default=720,
-        min=300,
-        max=2160
-    )
 
-def register_scene_environment_properties():
-    """注册SceneEnvironment基础属性"""
-    from bpy.props import IntProperty, FloatProperty, FloatVectorProperty, BoolProperty, StringProperty
+# 显示 PySide6 信息操作符
+class ShowPySide6InfoOperator(bpy.types.Operator):
+    bl_idname = "qt_quick3d.show_pyside6_info"
+    bl_label = "Show PySide6 Info"
+    bl_description = "Display detailed PySide6 installation information"
     
-    # 抗锯齿设置
-    bpy.types.Scene.qtquick3d_antialiasing_mode = IntProperty(
-        name="Antialiasing Mode",
-        description="Qt Quick3D antialiasing mode",
-        default=0,
-        min=0,
-        max=3
-    )
-    
-    bpy.types.Scene.qtquick3d_antialiasing_quality = IntProperty(
-        name="Antialiasing Quality",
-        description="Qt Quick3D antialiasing quality",
-        default=2,
-        min=0,
-        max=3
-    )
-    
-    # 环境光遮蔽
-    bpy.types.Scene.qtquick3d_ao_enabled = BoolProperty(
-        name="AO Enabled",
-        description="Enable ambient occlusion",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_ao_strength = FloatProperty(
-        name="AO Strength",
-        description="Ambient occlusion strength",
-        default=1.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    # 背景和清除颜色
-    bpy.types.Scene.qtquick3d_background_mode = IntProperty(
-        name="Background Mode",
-        description="Background mode",
-        default=0,
-        min=0,
-        max=3
-    )
-    
-    bpy.types.Scene.qtquick3d_clear_color = FloatVectorProperty(
-        name="Clear Color",
-        description="Clear color",
-        default=(0.0, 0.0, 0.0, 1.0),
-        size=4,
-        subtype='COLOR'
-    )
-    
-    # 深度测试
-    bpy.types.Scene.qtquick3d_depth_test_enabled = BoolProperty(
-        name="Depth Test",
-        description="Enable depth test",
-        default=True
-    )
-    
-    # 环境光遮蔽详细设置
-    bpy.types.Scene.qtquick3d_ao_bias = FloatProperty(
-        name="AO Bias",
-        description="Ambient occlusion bias",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_ao_distance = FloatProperty(
-        name="AO Distance",
-        description="Ambient occlusion distance",
-        default=5.0,
-        min=0.1,
-        max=100.0
-    )
-    
-    bpy.types.Scene.qtquick3d_ao_dither = BoolProperty(
-        name="AO Dither",
-        description="Enable ambient occlusion dithering",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_ao_sample_rate = IntProperty(
-        name="AO Sample Rate",
-        description="Ambient occlusion sample rate",
-        default=2,
-        min=1,
-        max=8
-    )
-    
-    bpy.types.Scene.qtquick3d_ao_softness = FloatProperty(
-        name="AO Softness",
-        description="Ambient occlusion softness",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    # 深度设置
-    bpy.types.Scene.qtquick3d_depth_prepass_enabled = BoolProperty(
-        name="Depth PrePass",
-        description="Enable depth prepass",
-        default=False
-    )
-    
-    # 环境探针
-    bpy.types.Scene.qtquick3d_probe_exposure = FloatProperty(
-        name="Probe Exposure",
-        description="Environment probe exposure",
-        default=0.0,
-        min=-5.0,
-        max=5.0
-    )
-    
-    bpy.types.Scene.qtquick3d_probe_horizon = FloatProperty(
-        name="Probe Horizon",
-        description="Environment probe horizon",
-        default=0.0,
-        min=-1.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_probe_orientation = FloatVectorProperty(
-        name="Probe Orientation",
-        description="Environment probe orientation",
-        default=(0.0, 0.0, 0.0),
-        size=3
-    )
-    
-    # 天空盒设置
-    bpy.types.Scene.qtquick3d_skybox_cubemap = StringProperty(
-        name="SkyBox CubeMap",
-        description="Skybox cubemap texture",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_skybox_blur_amount = FloatProperty(
-        name="SkyBox Blur Amount",
-        description="Skybox blur amount",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    # 抗锯齿高级设置
-    bpy.types.Scene.qtquick3d_specular_aa_enabled = BoolProperty(
-        name="Specular AA",
-        description="Enable specular anti-aliasing",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_temporal_aa_enabled = BoolProperty(
-        name="Temporal AA",
-        description="Enable temporal anti-aliasing",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_temporal_aa_strength = FloatProperty(
-        name="Temporal AA Strength",
-        description="Temporal anti-aliasing strength",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    # 色调映射
-    bpy.types.Scene.qtquick3d_tonemap_mode = IntProperty(
-        name="Tonemap Mode",
-        description="Tone mapping mode",
-        default=0,
-        min=0,
-        max=3
-    )
-    
-    # 其他设置
-    bpy.types.Scene.qtquick3d_oit_method = IntProperty(
-        name="OIT Method",
-        description="Order independent transparency method",
-        default=0,
-        min=0,
-        max=2
-    )
-    
-    bpy.types.Scene.qtquick3d_light_probe = StringProperty(
-        name="Light Probe",
-        description="Light probe texture",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_lightmapper = IntProperty(
-        name="Lightmapper",
-        description="Lightmapper type",
-        default=0,
-        min=0,
-        max=2
-    )
-    
-    bpy.types.Scene.qtquick3d_scissor_rect = FloatVectorProperty(
-        name="Scissor Rect",
-        description="Scissor rectangle (x, y, width, height) - x,y是左上角坐标，width,height是View3D分辨率",
-        default=(0.0, 0.0, 1280.0, 720.0),
-        size=4
-    )
-    
-    # 裁剪启用开关
-    bpy.types.Scene.qtquick3d_scissor_enabled = BoolProperty(
-        name="Enable Scissor",
-        description="Enable scissor rectangle on SceneEnvironment",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_fog = StringProperty(
-        name="Fog",
-        description="Fog settings",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_debug_settings = StringProperty(
-        name="Debug Settings",
-        description="Debug settings",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_effects = StringProperty(
-        name="Effects",
-        description="Effects settings",
-        default="",
-        subtype='FILE_PATH'
-    )
+    def execute(self, context):
+        # 获取PySide6信息
+        pyside6_info = path_manager.get_pyside6_installation_info()
+        
+        # 获取Python信息
+        python_info = path_manager.get_python_executable_info()
+        
+        # 创建信息消息
+        if pyside6_info['available']:
+            current = pyside6_info['current']
+            message = f"PySide6 {current['version']} found at:\n{current['path']}\n\nInstallation: {current['description']}"
+            self.report({'INFO'}, f"PySide6 {current['version']} is available")
+        else:
+            message = f"PySide6 not available: {pyside6_info['error']}"
+            self.report({'WARNING'}, "PySide6 is not available")
+        
+        # 显示对话框
+        def draw(self, context):
+            layout = self.layout
+            
+            # PySide6信息
+            box = layout.box()
+            box.label(text="PySide6 Information", icon='INFO')
+            
+            if pyside6_info['available']:
+                # 当前使用的安装
+                current = pyside6_info['current']
+                col = box.column(align=True)
+                col.label(text=f"当前使用:", icon='RESTRICT_SELECT_OFF')
+                col.label(text=f"  版本: {current['version']}")
+                col.label(text=f"  路径: {current['path']}")
+                col.label(text=f"  位置: {current['description']}")
+                
+                # 显示所有可用的安装
+                all_installs = pyside6_info['all_installations']
+                if len(all_installs) > 1:
+                    col.separator()
+                    col.label(text=f"所有可用安装 ({len(all_installs)}个):", icon='COLLECTION_NEW')
+                    
+                    for i, install in enumerate(all_installs):
+                        sub_col = col.column(align=True)
+                        if install['path'] == current['path']:
+                            sub_col.label(text=f"  {i+1}. {install['description']} (当前)", icon='CHECKMARK')
+                        else:
+                            priority_text = "推荐" if install['priority'] == 1 else "备选"
+                            sub_col.label(text=f"  {i+1}. {install['description']} ({priority_text})", icon='INFO')
+                            # 添加切换按钮
+                            switch_op = sub_col.operator("qt_quick3d.switch_pyside6_installation", 
+                                                       text=f"切换到 {install['type'].title()}", 
+                                                       icon='ARROW_LEFTRIGHT')
+                            switch_op.installation_path = install['path']
+                        sub_col.label(text=f"     版本: {install['version']}")
+                        sub_col.label(text=f"     路径: {install['path']}")
+                
+                # 推荐安装
+                best = pyside6_info['best_installation']
+                if best and best['path'] != current['path']:
+                    col.separator()
+                    col.label(text="推荐使用:", icon='FUND')
+                    col.label(text=f"  {best['description']}")
+                    col.label(text=f"  版本: {best['version']}")
+                    col.label(text=f"  路径: {best['path']}")
+                    # 添加快速切换按钮
+                    switch_op = col.operator("qt_quick3d.switch_pyside6_installation", 
+                                           text="切换到推荐安装", 
+                                           icon='FUND')
+                    switch_op.installation_path = best['path']
+            else:
+                col = box.column(align=True)
+                col.label(text=f"状态: 不可用", icon='CANCEL')
+                col.label(text=f"错误: {pyside6_info['error']}")
+            
+            # Python信息
+            box = layout.box()
+            box.label(text="Python Information", icon='CONSOLE')
+            
+            col = box.column(align=True)
+            col.label(text=f"可执行文件: {python_info['executable']}")
+            col.label(text=f"版本: {python_info['version'].split()[0]}")
+            col.label(text=f"系统 site-packages:")
+            for site_path in python_info['site_packages']:
+                col.label(text=f"  • {site_path}")
+            if python_info['user_site']:
+                col.label(text=f"用户 site-packages: {python_info['user_site']}")
+            col.label(text=f"虚拟环境: {'是' if python_info['is_virtual_env'] else '否'}")
+        
+        # 显示对话框
+        context.window_manager.popup_menu(draw, title="PySide6 & Python Info", icon='INFO')
+        
+        return {'FINISHED'}
 
-def register_extended_scene_environment_properties():
-    """注册ExtendedSceneEnvironment高级属性"""
-    from bpy.props import IntProperty, FloatProperty, FloatVectorProperty, BoolProperty, StringProperty
-    
-    # 扩展环境开关
-    bpy.types.Scene.qtquick3d_use_extended_environment = BoolProperty(
-        name="Use Extended Environment",
-        description="Enable extended scene environment settings",
-        default=False
-    )
-    
-    # 颜色调整
-    bpy.types.Scene.qtquick3d_brightness = FloatProperty(
-        name="Brightness",
-        description="Brightness adjustment",
-        default=0.0,
-        min=-1.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_contrast = FloatProperty(
-        name="Contrast",
-        description="Contrast adjustment", 
-        default=0.0,
-        min=-1.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_saturation = FloatProperty(
-        name="Saturation",
-        description="Saturation adjustment",
-        default=0.0,
-        min=-1.0,
-        max=1.0
-    )
-    
-    # 曝光和锐化
-    bpy.types.Scene.qtquick3d_exposure = FloatProperty(
-        name="Exposure",
-        description="Exposure value",
-        default=0.0,
-        min=-5.0,
-        max=5.0
-    )
-    
-    bpy.types.Scene.qtquick3d_sharpness = FloatProperty(
-        name="Sharpness",
-        description="Sharpness amount",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    # 景深效果
-    bpy.types.Scene.qtquick3d_dof_enabled = BoolProperty(
-        name="Enable Depth of Field",
-        description="Enable depth of field effect",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_dof_blur_amount = FloatProperty(
-        name="DOF Blur Amount",
-        description="Depth of field blur amount",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    # 发光效果
-    bpy.types.Scene.qtquick3d_glow_enabled = BoolProperty(
-        name="Enable Glow",
-        description="Enable glow effect",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_intensity = FloatProperty(
-        name="Glow Intensity",
-        description="Glow intensity",
-        default=0.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    # 镜头光晕
-    bpy.types.Scene.qtquick3d_lens_flare_enabled = BoolProperty(
-        name="Enable Lens Flare",
-        description="Enable lens flare effect",
-        default=False
-    )
-    
-    # 颜色调整开关
-    bpy.types.Scene.qtquick3d_color_adjustments_enabled = BoolProperty(
-        name="Enable Color Adjustments",
-        description="Enable color adjustments",
-        default=False
-    )
-    
-    # 景深详细设置
-    bpy.types.Scene.qtquick3d_dof_focus_distance = FloatProperty(
-        name="DOF Focus Distance",
-        description="Depth of field focus distance",
-        default=100.0,
-        min=0.1,
-        max=1000.0
-    )
-    
-    bpy.types.Scene.qtquick3d_dof_focus_range = FloatProperty(
-        name="DOF Focus Range",
-        description="Depth of field focus range",
-        default=10.0,
-        min=0.1,
-        max=100.0
-    )
-    
-    # 抖动设置
-    bpy.types.Scene.qtquick3d_dithering_enabled = BoolProperty(
-        name="Enable Dithering",
-        description="Enable dithering",
-        default=False
-    )
-    
-    # FXAA设置
-    bpy.types.Scene.qtquick3d_fxaa_enabled = BoolProperty(
-        name="Enable FXAA",
-        description="Enable FXAA anti-aliasing",
-        default=False
-    )
-    
-    # 发光详细设置
-    bpy.types.Scene.qtquick3d_glow_blend_mode = IntProperty(
-        name="Glow Blend Mode",
-        description="Glow blend mode",
-        default=0,
-        min=0,
-        max=3
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_bloom = FloatProperty(
-        name="Glow Bloom",
-        description="Glow bloom amount",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_hdr_maximum_value = FloatProperty(
-        name="Glow HDR Max",
-        description="Glow HDR maximum value",
-        default=1.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_hdr_minimum_value = FloatProperty(
-        name="Glow HDR Min",
-        description="Glow HDR minimum value",
-        default=0.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_hdr_scale = FloatProperty(
-        name="Glow HDR Scale",
-        description="Glow HDR scale",
-        default=1.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_level = IntProperty(
-        name="Glow Level",
-        description="Glow level",
-        default=0,
-        min=0,
-        max=10
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_quality_high = BoolProperty(
-        name="High Quality Glow",
-        description="Enable high quality glow",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_strength = FloatProperty(
-        name="Glow Strength",
-        description="Glow strength",
-        default=0.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    bpy.types.Scene.qtquick3d_glow_use_bicubic_upscale = BoolProperty(
-        name="Bicubic Upscale",
-        description="Use bicubic upscaling for glow",
-        default=False
-    )
-    
-    # 镜头光晕详细设置
-    bpy.types.Scene.qtquick3d_lens_flare_apply_dirt_texture = BoolProperty(
-        name="Apply Dirt Texture",
-        description="Apply dirt texture to lens flare",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_apply_starburst_texture = BoolProperty(
-        name="Apply Starburst Texture",
-        description="Apply starburst texture to lens flare",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_bloom_bias = FloatProperty(
-        name="Bloom Bias",
-        description="Lens flare bloom bias",
-        default=0.0,
-        min=-1.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_bloom_scale = FloatProperty(
-        name="Bloom Scale",
-        description="Lens flare bloom scale",
-        default=1.0,
-        min=0.0,
-        max=10.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_blur_amount = FloatProperty(
-        name="Blur Amount",
-        description="Lens flare blur amount",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_camera_direction = FloatVectorProperty(
-        name="Camera Direction",
-        description="Lens flare camera direction",
-        default=(0.0, 0.0, 1.0),
-        size=3
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_distortion = FloatProperty(
-        name="Distortion",
-        description="Lens flare distortion",
-        default=0.0,
-        min=-1.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_ghost_count = IntProperty(
-        name="Ghost Count",
-        description="Number of lens flare ghosts",
-        default=4,
-        min=0,
-        max=20
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_ghost_dispersal = FloatProperty(
-        name="Ghost Dispersal",
-        description="Lens flare ghost dispersal",
-        default=0.3,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_halo_width = FloatProperty(
-        name="Halo Width",
-        description="Lens flare halo width",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_lens_color_texture = StringProperty(
-        name="Color Texture",
-        description="Lens flare color texture",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_lens_dirt_texture = StringProperty(
-        name="Dirt Texture",
-        description="Lens flare dirt texture",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_lens_starburst_texture = StringProperty(
-        name="Starburst Texture",
-        description="Lens flare starburst texture",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    bpy.types.Scene.qtquick3d_lens_flare_stretch_to_aspect = FloatProperty(
-        name="Stretch To Aspect",
-        description="Stretch lens flare to aspect ratio",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    # LUT设置
-    bpy.types.Scene.qtquick3d_lut_enabled = BoolProperty(
-        name="Enable LUT",
-        description="Enable LUT (Look-Up Table)",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_lut_filter_alpha = FloatProperty(
-        name="LUT Filter Alpha",
-        description="LUT filter alpha value",
-        default=1.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lut_size = FloatProperty(
-        name="LUT Size",
-        description="LUT size",
-        default=32.0,
-        min=16.0,
-        max=64.0
-    )
-    
-    bpy.types.Scene.qtquick3d_lut_texture = StringProperty(
-        name="LUT Texture",
-        description="Path to LUT texture file",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    # 白点设置
-    bpy.types.Scene.qtquick3d_white_point = FloatProperty(
-        name="White Point",
-        description="White point value",
-        default=1.0,
-        min=0.1,
-        max=10.0
-    )
-    
-    # 暗角详细设置
-    bpy.types.Scene.qtquick3d_vignette_enabled = BoolProperty(
-        name="Enable Vignette",
-        description="Enable vignette effect",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_vignette_strength = FloatProperty(
-        name="Vignette Strength",
-        description="Vignette strength",
-        default=0.0,
-        min=0.0,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_vignette_color = FloatVectorProperty(
-        name="Vignette Color",
-        description="Vignette color",
-        default=(0.0, 0.0, 0.0, 1.0),
-        size=4,
-        subtype='COLOR'
-    )
-    
-    bpy.types.Scene.qtquick3d_vignette_radius = FloatProperty(
-        name="Vignette Radius",
-        description="Vignette radius",
-        default=0.5,
-        min=0.0,
-        max=1.0
-    )
-
-def register_wasd_controller_properties():
-    """注册WASD控制器相关属性"""
-    from bpy.props import IntProperty, FloatProperty, BoolProperty, EnumProperty
-    
-    # WASD控制器开关
-    bpy.types.Scene.qtquick3d_wasd_enabled = BoolProperty(
-        name="Enable WASD Controller",
-        description="Enable WASD controller for camera navigation",
-        default=True
-    )
-    
-    # 速度设置
-    bpy.types.Scene.qtquick3d_wasd_speed = FloatProperty(
-        name="Speed",
-        description="Base speed of navigation",
-        default=1.0,
-        min=0.1,
-        max=10.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_forward_speed = FloatProperty(
-        name="Forward Speed",
-        description="Speed when moving forward",
-        default=5.0,
-        min=0.1,
-        max=50.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_back_speed = FloatProperty(
-        name="Back Speed",
-        description="Speed when moving backward",
-        default=5.0,
-        min=0.1,
-        max=50.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_left_speed = FloatProperty(
-        name="Left Speed",
-        description="Speed when moving left",
-        default=5.0,
-        min=0.1,
-        max=50.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_right_speed = FloatProperty(
-        name="Right Speed",
-        description="Speed when moving right",
-        default=5.0,
-        min=0.1,
-        max=50.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_up_speed = FloatProperty(
-        name="Up Speed",
-        description="Speed when moving up",
-        default=5.0,
-        min=0.1,
-        max=50.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_down_speed = FloatProperty(
-        name="Down Speed",
-        description="Speed when moving down",
-        default=5.0,
-        min=0.1,
-        max=50.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_shift_speed = FloatProperty(
-        name="Shift Speed",
-        description="Speed multiplier when shift key is pressed",
-        default=3.0,
-        min=0.1,
-        max=10.0
-    )
-    
-    # 鼠标控制设置
-    bpy.types.Scene.qtquick3d_wasd_mouse_enabled = BoolProperty(
-        name="Mouse Enabled",
-        description="Enable mouse controls",
-        default=True
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_x_speed = FloatProperty(
-        name="X Speed",
-        description="Speed when mouse moves along X axis",
-        default=0.1,
-        min=0.01,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_y_speed = FloatProperty(
-        name="Y Speed",
-        description="Speed when mouse moves along Y axis",
-        default=0.1,
-        min=0.01,
-        max=1.0
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_x_invert = BoolProperty(
-        name="X Invert",
-        description="Invert X-axis controls",
-        default=False
-    )
-    
-    bpy.types.Scene.qtquick3d_wasd_y_invert = BoolProperty(
-        name="Y Invert",
-        description="Invert Y-axis controls",
-        default=True
-    )
-    
-    # 键盘控制设置
-    bpy.types.Scene.qtquick3d_wasd_keys_enabled = BoolProperty(
-        name="Keys Enabled",
-        description="Enable key controls",
-        default=True
-    )
-    
-    # 接受的按钮设置
-    bpy.types.Scene.qtquick3d_wasd_accepted_buttons = EnumProperty(
-        name="Accepted Buttons",
-        description="Specifies the buttons accepted by the controller",
-        items=[
-            ("LEFT", "Left Button", "Left mouse button only"),
-            ("RIGHT", "Right Button", "Right mouse button only"),
-            ("MIDDLE", "Middle Button", "Middle mouse button only"),
-            ("LEFT_RIGHT", "Left + Right", "Left and right mouse buttons"),
-            ("ALL", "All Buttons", "All mouse buttons")
-        ],
-        default="LEFT"
-    )
-
-def unregister_wasd_controller_properties():
-    """注销WASD控制器相关属性"""
-    # WASD控制器开关
-    del bpy.types.Scene.qtquick3d_wasd_enabled
-    
-    # 速度设置
-    del bpy.types.Scene.qtquick3d_wasd_speed
-    del bpy.types.Scene.qtquick3d_wasd_forward_speed
-    del bpy.types.Scene.qtquick3d_wasd_back_speed
-    del bpy.types.Scene.qtquick3d_wasd_left_speed
-    del bpy.types.Scene.qtquick3d_wasd_right_speed
-    del bpy.types.Scene.qtquick3d_wasd_up_speed
-    del bpy.types.Scene.qtquick3d_wasd_down_speed
-    del bpy.types.Scene.qtquick3d_wasd_shift_speed
-    
-    # 鼠标控制设置
-    del bpy.types.Scene.qtquick3d_wasd_mouse_enabled
-    del bpy.types.Scene.qtquick3d_wasd_x_speed
-    del bpy.types.Scene.qtquick3d_wasd_y_speed
-    del bpy.types.Scene.qtquick3d_wasd_x_invert
-    del bpy.types.Scene.qtquick3d_wasd_y_invert
-    
-    # 键盘控制设置
-    del bpy.types.Scene.qtquick3d_wasd_keys_enabled
-    del bpy.types.Scene.qtquick3d_wasd_accepted_buttons
-
-def unregister_scene_properties():
-    """注销场景属性"""
-    # Balsam转换器相关属性
-    del bpy.types.Scene.work_space_path
-    del bpy.types.Scene.balsam_gltf_path
-    del bpy.types.Scene.balsam_output_dir
-    # 版本选择
-    try:
-        del bpy.types.Scene.balsam_version
-    except Exception:
-        pass
-    
-    # 注销Qt Quick3D引擎属性
-    unregister_qt_quick3d_properties()
-
-def unregister_qt_quick3d_properties():
-    """注销Qt Quick3D引擎相关属性"""
-    # UI控制属性
-    del bpy.types.Scene.show_scene_settings
-    
-    # 窗口/View3D尺寸设置（统一设置）
-    del bpy.types.Scene.qtquick3d_view3d_width
-    del bpy.types.Scene.qtquick3d_view3d_height
-    
-    # SceneEnvironment基础属性
-    del bpy.types.Scene.qtquick3d_antialiasing_mode
-    del bpy.types.Scene.qtquick3d_antialiasing_quality
-    del bpy.types.Scene.qtquick3d_ao_enabled
-    del bpy.types.Scene.qtquick3d_ao_strength
-    del bpy.types.Scene.qtquick3d_ao_bias
-    del bpy.types.Scene.qtquick3d_ao_distance
-    del bpy.types.Scene.qtquick3d_ao_dither
-    del bpy.types.Scene.qtquick3d_ao_sample_rate
-    del bpy.types.Scene.qtquick3d_ao_softness
-    del bpy.types.Scene.qtquick3d_background_mode
-    del bpy.types.Scene.qtquick3d_clear_color
-    del bpy.types.Scene.qtquick3d_depth_test_enabled
-    del bpy.types.Scene.qtquick3d_depth_prepass_enabled
-    del bpy.types.Scene.qtquick3d_probe_exposure
-    del bpy.types.Scene.qtquick3d_probe_horizon
-    del bpy.types.Scene.qtquick3d_probe_orientation
-    del bpy.types.Scene.qtquick3d_skybox_cubemap
-    del bpy.types.Scene.qtquick3d_skybox_blur_amount
-    del bpy.types.Scene.qtquick3d_specular_aa_enabled
-    del bpy.types.Scene.qtquick3d_temporal_aa_enabled
-    del bpy.types.Scene.qtquick3d_temporal_aa_strength
-    del bpy.types.Scene.qtquick3d_tonemap_mode
-    del bpy.types.Scene.qtquick3d_oit_method
-    del bpy.types.Scene.qtquick3d_light_probe
-    del bpy.types.Scene.qtquick3d_lightmapper
-    del bpy.types.Scene.qtquick3d_scissor_rect
-    del bpy.types.Scene.qtquick3d_scissor_enabled
-    del bpy.types.Scene.qtquick3d_fog
-    del bpy.types.Scene.qtquick3d_debug_settings
-    del bpy.types.Scene.qtquick3d_effects
-    
-    # ExtendedSceneEnvironment高级属性
-    del bpy.types.Scene.qtquick3d_use_extended_environment
-    del bpy.types.Scene.qtquick3d_brightness
-    del bpy.types.Scene.qtquick3d_contrast
-    del bpy.types.Scene.qtquick3d_saturation
-    del bpy.types.Scene.qtquick3d_color_adjustments_enabled
-    del bpy.types.Scene.qtquick3d_exposure
-    del bpy.types.Scene.qtquick3d_sharpness
-    del bpy.types.Scene.qtquick3d_white_point
-    del bpy.types.Scene.qtquick3d_dof_enabled
-    del bpy.types.Scene.qtquick3d_dof_blur_amount
-    del bpy.types.Scene.qtquick3d_dof_focus_distance
-    del bpy.types.Scene.qtquick3d_dof_focus_range
-    del bpy.types.Scene.qtquick3d_dithering_enabled
-    del bpy.types.Scene.qtquick3d_fxaa_enabled
-    del bpy.types.Scene.qtquick3d_glow_enabled
-    del bpy.types.Scene.qtquick3d_glow_intensity
-    del bpy.types.Scene.qtquick3d_glow_blend_mode
-    del bpy.types.Scene.qtquick3d_glow_bloom
-    del bpy.types.Scene.qtquick3d_glow_hdr_maximum_value
-    del bpy.types.Scene.qtquick3d_glow_hdr_minimum_value
-    del bpy.types.Scene.qtquick3d_glow_hdr_scale
-    del bpy.types.Scene.qtquick3d_glow_level
-    del bpy.types.Scene.qtquick3d_glow_quality_high
-    del bpy.types.Scene.qtquick3d_glow_strength
-    del bpy.types.Scene.qtquick3d_glow_use_bicubic_upscale
-    del bpy.types.Scene.qtquick3d_lens_flare_enabled
-    del bpy.types.Scene.qtquick3d_lens_flare_apply_dirt_texture
-    del bpy.types.Scene.qtquick3d_lens_flare_apply_starburst_texture
-    del bpy.types.Scene.qtquick3d_lens_flare_bloom_bias
-    del bpy.types.Scene.qtquick3d_lens_flare_bloom_scale
-    del bpy.types.Scene.qtquick3d_lens_flare_blur_amount
-    del bpy.types.Scene.qtquick3d_lens_flare_camera_direction
-    del bpy.types.Scene.qtquick3d_lens_flare_distortion
-    del bpy.types.Scene.qtquick3d_lens_flare_ghost_count
-    del bpy.types.Scene.qtquick3d_lens_flare_ghost_dispersal
-    del bpy.types.Scene.qtquick3d_lens_flare_halo_width
-    del bpy.types.Scene.qtquick3d_lens_flare_lens_color_texture
-    del bpy.types.Scene.qtquick3d_lens_flare_lens_dirt_texture
-    del bpy.types.Scene.qtquick3d_lens_flare_lens_starburst_texture
-    del bpy.types.Scene.qtquick3d_lens_flare_stretch_to_aspect
-    del bpy.types.Scene.qtquick3d_lut_enabled
-    del bpy.types.Scene.qtquick3d_lut_filter_alpha
-    del bpy.types.Scene.qtquick3d_lut_size
-    del bpy.types.Scene.qtquick3d_lut_texture
-    del bpy.types.Scene.qtquick3d_vignette_enabled
-    del bpy.types.Scene.qtquick3d_vignette_color
-    del bpy.types.Scene.qtquick3d_vignette_radius
-    del bpy.types.Scene.qtquick3d_vignette_strength
-    
-    # WASD控制器属性
-    unregister_wasd_controller_properties()
+# 切换PySide6安装操作符
+class SwitchPySide6InstallationOperator(bpy.types.Operator):
+    bl_idname = "qt_quick3d.switch_pyside6_installation"
+    bl_label = "Switch PySide6 Installation"
+    bl_description = "Switch to a different PySide6 installation"
+    
+    installation_path: bpy.props.StringProperty(
+        name="Installation Path",
+        description="Path to the PySide6 installation to switch to"
+    )
+    
+    def execute(self, context):
+        if not self.installation_path or not os.path.exists(self.installation_path):
+            self.report({'ERROR'}, "Invalid PySide6 installation path")
+            return {'CANCELLED'}
+        
+        try:
+            # 将新的安装路径添加到sys.path的开头
+            install_dir = os.path.dirname(self.installation_path)
+            
+            # 移除现有的PySide6路径
+            import sys
+            paths_to_remove = []
+            for path in sys.path:
+                if 'PySide6' in path or 'site-packages' in path:
+                    paths_to_remove.append(path)
+            
+            for path in paths_to_remove:
+                if path in sys.path:
+                    sys.path.remove(path)
+            
+            # 添加新的路径到开头
+            if install_dir not in sys.path:
+                sys.path.insert(0, install_dir)
+            
+            # 重新加载PySide6模块
+            import importlib
+            if 'PySide6' in sys.modules:
+                importlib.reload(sys.modules['PySide6'])
+            
+            self.report({'INFO'}, f"Switched to PySide6 installation: {self.installation_path}")
+            
+            # 刷新界面
+            for area in context.screen.areas:
+                area.tag_redraw()
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to switch PySide6 installation: {str(e)}")
+            return {'CANCELLED'}
+        
+        return {'FINISHED'}
 
 # 安装 PySide6 操作符
 class InstallPySide6Operator(bpy.types.Operator):
@@ -1284,6 +600,9 @@ class QtQuick3DAddonPreferences(AddonPreferences):
         if PYSDIE6_AVAILABLE:
             layout.label(text="✓ PySide6: System Installation (Ready)")
             
+            # 添加信息按钮
+            layout.operator("qt_quick3d.show_pyside6_info", text="Show PySide6 Info", icon='INFO')
+            
             # 显示重启按钮（如果刚安装完成）
             if self.restart_needed:
                 box = layout.box()
@@ -1381,12 +700,6 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         # 提供调用balsam转换和写入的按钮
         layout.separator()
         layout.label(text="Balsam Conversion:")
-        
-        # 添加IBL图像复制测试按钮
-        layout.separator()
-        layout.label(text="IBL Image Copy Test:")
-        row = layout.row()
-        row.operator("qt_quick3d.test_ibl_copy", text="Test IBL Copy", icon='IMAGE_DATA')
         
         # INSERT_YOUR_CODE
         # 添加balsam版本选择下拉框
@@ -1590,6 +903,26 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
                 row = keyboard_box.row(align=True)
                 row.prop(scene, "qtquick3d_wasd_accepted_buttons", text="Accepted Buttons")
 
+        # Debug 折叠面板
+        debug_box = layout.box()
+        debug_box.prop(scene, "show_debug_options", icon="TRIA_DOWN" if getattr(scene, "show_debug_options", False) else "TRIA_RIGHT", emboss=False, text="Debug Options")
+
+        if getattr(scene, "show_debug_options", False):
+            # QML调试模式切换
+            debug_box.label(text="QML Debug:")
+            row = debug_box.row()
+            row.operator("qt_quick3d.toggle_debug_mode", text="Toggle QML Debug Mode")
+            
+            # IBL测试
+            debug_box.label(text="IBL Testing:")
+            row = debug_box.row()
+            row.operator("qt_quick3d.test_ibl_copy", text="Test IBL Copy", icon='IMAGE_DATA')
+            
+            # 其他调试功能可以在这里添加
+            debug_box.label(text="Other Debug Tools:")
+            # 未来可以添加更多调试工具
+            # row = debug_box.row()
+            # row.operator("qt_quick3d.debug_tool_name", text="Debug Tool Name")
 
         # 显示一些状态信息
         layout.separator()
@@ -1620,17 +953,61 @@ class QT_QUICK3D_OT_open_window(Operator):
     """Open Qt6.9 Quick3D Window"""
     bl_idname = "qt_quick3d.open_window"
     bl_label = "Open Quick3D Window"
+    bl_description = "Open Quick3D window using the main integration module"
     
     def execute(self, context):
         try:
-            # 尝试启动Qt Quick3D窗口
+            print("INFO: 启动Quick3D窗口...")
+            
+            # 调用主要的Quick3D窗口启动函数
             if hasattr(qt_quick3d_integration, 'show_quick3d_window'):
-                qt_quick3d_integration.show_quick3d_window()
-                self.report({'INFO'}, "Quick3D window opened successfully!")
+                success = qt_quick3d_integration.show_quick3d_window()
+                if success:
+                    self.report({'INFO'}, "Quick3D window opened successfully!")
+                    print("INFO: Quick3D窗口启动成功")
+                else:
+                    self.report({'ERROR'}, "Failed to open Quick3D window")
+                    print("ERROR: Quick3D窗口启动失败")
             else:
-                self.report({'WARNING'}, "Qt integration not fully implemented yet")
+                self.report({'ERROR'}, "Quick3D integration module not available")
+                print("ERROR: Quick3D集成模块不可用")
+                
         except Exception as e:
-            self.report({'ERROR'}, f"Failed to open Quick3D window: {str(e)}")
+            error_msg = f"Failed to open Quick3D window: {str(e)}"
+            self.report({'ERROR'}, error_msg)
+            print(f"ERROR: {error_msg}")
+            import traceback
+            traceback.print_exc()
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_toggle_debug_mode(Operator):
+    """Toggle QML Debug Mode"""
+    bl_idname = "qt_quick3d.toggle_debug_mode"
+    bl_label = "Toggle QML Debug Mode"
+    bl_description = "Toggle QML debug mode to show/hide full QML content in logs"
+    
+    def execute(self, context):
+        try:
+            # 导入qml_handler模块
+            from . import qml_handler
+            
+            # 检查当前调试模式状态
+            current_mode = qml_handler.DEFAULT_DEBUG_MODE
+            
+            if current_mode:
+                # 当前是调试模式，切换到简化模式
+                qml_handler.disable_qml_debug_mode()
+                self.report({'INFO'}, "QML Debug Mode: OFF (Simplified logs)")
+            else:
+                # 当前是简化模式，切换到调试模式
+                qml_handler.enable_qml_debug_mode()
+                self.report({'INFO'}, "QML Debug Mode: ON (Full QML content)")
+                
+        except Exception as e:
+            error_msg = f"Failed to toggle debug mode: {str(e)}"
+            self.report({'ERROR'}, error_msg)
+            print(f"ERROR: {error_msg}")
         
         return {'FINISHED'}
 
@@ -1996,25 +1373,29 @@ class QT_QUICK3D_OT_search_local_balsam(Operator):
             print("🔍 开始搜索本地balsam版本...")
             
             # 扫描C:/Qt
-            candidates = _scan_qt_balsam_paths()
+            candidates = path_manager.scan_qt_balsam_paths()
             
             if not candidates:
                 self.report({'WARNING'}, "No balsam.exe found in C:/Qt")
                 return {'CANCELLED'}
             
             # 更新全局映射
-            global BALSAM_PATH_MAP, BALSAM_CACHE_LOADED
-            BALSAM_PATH_MAP = {}
+            path_manager.BALSAM_PATH_MAP = {}
             for i, exe in enumerate(candidates):
                 key = f"QT_{i}"
-                BALSAM_PATH_MAP[key] = exe
+                path_manager.BALSAM_PATH_MAP[key] = exe
             
             # 重置缓存加载标志
-            BALSAM_CACHE_LOADED = False
+            path_manager.BALSAM_CACHE_LOADED = False
             
             # 保存到缓存文件
-            if _save_balsam_cache():
+            if path_manager.save_balsam_cache():
                 self.report({'INFO'}, f"Found {len(candidates)} balsam versions and saved to cache")
+                
+                # 强制更新balsam_version枚举属性
+                if hasattr(context.scene, 'balsam_version'):
+                    # 触发枚举更新
+                    context.scene.balsam_version = context.scene.balsam_version
                 
                 # 刷新界面
                 for area in context.screen.areas:
@@ -2038,6 +1419,7 @@ class QT_QUICK3D_OT_balsam_convert_existing(Operator):
     def execute(self, context):
         try:
             from . import balsam_gltf_converter
+            from . import ibl_mappling
             converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
             
             # 优先使用工作空间路径，回退到旧属性
@@ -2051,6 +1433,21 @@ class QT_QUICK3D_OT_balsam_convert_existing(Operator):
             
             if work_space:
                 print(f"✅ 使用工作空间路径: {work_space}")
+            
+            # 在转换之前复制world图像
+            print("🔄 开始复制World图像到输出目录...")
+            copy_result = ibl_mappling.copy_all_world_images_to_balsam_output()
+            
+            if copy_result['surface_copied']:
+                self.report({'INFO'}, f"Surface IBL图像已复制: {os.path.basename(copy_result['surface_image_dest'])}")
+                print(f"✅ Surface IBL图像复制成功: {copy_result['surface_image_dest']}")
+            
+            if copy_result['environment_copied']:
+                self.report({'INFO'}, f"Environment IBL图像已复制: {os.path.basename(copy_result['environment_image_dest'])}")
+                print(f"✅ Environment IBL图像复制成功: {copy_result['environment_image_dest']}")
+            
+            if not copy_result['surface_copied'] and not copy_result['environment_copied']:
+                print("ℹ️ 没有World图像需要复制")
             
             success = converter.convert_existing_gltf(gltf_path, output_dir)
             
@@ -2066,305 +1463,6 @@ class QT_QUICK3D_OT_balsam_convert_existing(Operator):
         
         return {'FINISHED'}
 
-class QT_QUICK3D_OT_open_quick_window(Operator):
-    """Open Quick3D window with Balsam conversion"""
-    bl_idname = "qt_quick3d.open_quick_window"
-    bl_label = "Open Quick3D Window"
-    bl_description = "Convert scene with Balsam and open Quick3D window"
-    
-    def execute(self, context):
-        try:
-            print("🚀 开始Quick3D窗口流程...")
-            
-            # 直接启动Quick3D窗口，跳过Balsam转换
-            print("⏭️ 跳过Balsam转换，直接启动Quick3D窗口...")
-            
-            # 启动Quick3D窗口
-            self.launch_quick3d_window()
-            
-            self.report({'INFO'}, "Quick3D window launched successfully!")
-            return {'FINISHED'}
-                
-        except Exception as e:
-            print(f"❌ Quick3D窗口启动失败: {e}")
-            self.report({'ERROR'}, f"Failed to launch Quick3D window: {str(e)}")
-            return {'CANCELLED'}
-    
-    def launch_quick3d_window(self):
-        """启动Quick3D窗口"""
-        try:
-            print("🔧 启动Quick3D窗口...")
-            
-            # 直接尝试导入PySide6模块
-            try:
-                from PySide6.QtCore import QTimer, Qt, QUrl
-                from PySide6.QtWidgets import QApplication, QPushButton, QMainWindow, QVBoxLayout, QWidget, QLabel
-                from PySide6.QtQuick import QQuickView
-                from PySide6.QtQml import QQmlApplicationEngine
-                print("✅ PySide6模块直接导入成功")
-            except ImportError as e:
-                print(f"❌ PySide6模块导入失败: {e}")
-                self.report({'ERROR'}, f"PySide6 not available: {str(e)}")
-                return
-            
-            # 创建QApplication
-            app = QApplication.instance()
-            if not app:
-                app = QApplication(["blender"])
-                print("✅ 创建新的QApplication")
-            else:
-                print("✅ 使用现有的QApplication")
-            
-            # 创建Quick3D主窗口
-            quick3d_window = self.create_quick3d_window()
-            quick3d_window.show()
-            
-            # 保存对窗口和app的全局引用，防止被垃圾回收
-            global _qml_window, _qml_app
-            _qml_window = quick3d_window
-            _qml_app = app
-            
-            print("✅ Quick3D窗口已启动")
-            print(" 窗口引用已保存，应该不会闪关了")
-            
-        except Exception as e:
-            print(f"❌ 启动Quick3D窗口失败: {e}")
-            raise
-    
-    def create_quick3d_window(self):
-        """创建Quick3D主窗口"""
-        try:
-            print("🔧 开始创建Quick3D窗口...")
-            
-            # 确保PySide6已导入 - 只导入基本组件
-            from PySide6.QtCore import QTimer, Qt, QUrl
-            from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QLabel
-            from PySide6.QtQuick import QQuickView
-            from PySide6.QtQml import QQmlApplicationEngine
-            
-            # 创建Quick3D主窗口类
-            class Quick3DMainWindow(QMainWindow):
-                """Quick3D主窗口"""
-                
-                def __init__(self):
-                    super().__init__()
-                    
-                    # 从场景设置获取窗口尺寸
-                    scene = bpy.context.scene
-                    window_width = getattr(scene, 'qtquick3d_view3d_width', 1280)
-                    window_height = getattr(scene, 'qtquick3d_view3d_height', 720)
-                    
-                    self.setWindowTitle("Quick3D Window")
-                    self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-                    self.resize(window_width, window_height)
-                    
-                    # 创建中央部件
-                    central_widget = QWidget()
-                    layout = QVBoxLayout()
-                    
-                    # 添加标题标签
-                    title_label = QLabel("Quick3D Window")
-                    title_label.setAlignment(Qt.AlignCenter)
-                    title_label.setStyleSheet("font-size: 18px; font-weight: bold; margin: 10px;")
-                    layout.addWidget(title_label)
-                    
-                    # 添加状态标签
-                    self.status_label = QLabel("Ready")
-                    self.status_label.setAlignment(Qt.AlignCenter)
-                    layout.addWidget(self.status_label)
-                    
-                    # 尝试创建QML View3D
-                    try:
-                        print("🔧 创建QML View3D...")
-                        
-                        # 创建QML引擎
-                        self.qml_engine = QQmlApplicationEngine()
-                        
-                        # 添加QML导入路径，使用Balsam转换器的全局路径
-                        try:
-                            from . import balsam_gltf_converter
-                            qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
-                            if os.path.exists(qml_output_dir):
-                                self.qml_engine.addImportPath(qml_output_dir)
-                                print(f"✅ 已添加QML导入路径: {qml_output_dir}")
-                                
-                                # 设置QML引擎的工作目录，使用QUrl.fromLocalFile
-                                from PySide6.QtCore import QUrl
-                                base_url = QUrl.fromLocalFile(qml_output_dir)
-                                self.qml_engine.setBaseUrl(base_url)
-                                print(f"✅ 已设置QML引擎工作目录: {qml_output_dir}")
-                                print(f"  Base URL: {base_url.toString()}")
-                                
-                                # 设置环境变量，确保QML引擎能找到文件
-                                os.environ['QML_IMPORT_PATH'] = qml_output_dir
-                                print(f"✅ 已设置QML_IMPORT_PATH环境变量: {qml_output_dir}")
-                                
-                                # 添加额外的导入路径，包括meshes子目录
-                                meshes_dir = os.path.join(qml_output_dir, "meshes")
-                                if os.path.exists(meshes_dir):
-                                    self.qml_engine.addImportPath(meshes_dir)
-                                    print(f"✅ 已添加meshes目录导入路径: {meshes_dir}")
-                            else:
-                                print(f"⚠️ QML输出目录不存在: {qml_output_dir}")
-                        except Exception as e:
-                            print(f"⚠️ 无法获取Balsam路径: {e}")
-                            # 回退到本地路径
-                            addon_dir = os.path.dirname(os.path.abspath(__file__))
-                            qml_output_dir = os.path.join(addon_dir, "output", "qml")
-                            if os.path.exists(qml_output_dir):
-                                self.qml_engine.addImportPath(qml_output_dir)
-                                print(f"✅ 已添加本地QML导入路径: {qml_output_dir}")
-                            else:
-                                print(f"⚠️ QML输出目录不存在: {qml_output_dir}")
-                        
-                        # 使用简单的测试QML内容
-                        qml_content = '''
-import QtQuick
-import QtQuick3D
-
-Window {
-    visible: true
-    width: 600
-    height: 400
-    title: "Quick3D Test Window"
-    
-    View3D {
-        anchors.fill: parent
-        
-        environment: SceneEnvironment {
-            clearColor: "#303030"
-            backgroundMode: SceneEnvironment.Color
-        }
-        
-        DirectionalLight {
-            eulerRotation.x: -30
-            eulerRotation.y: -70
-            ambientColor: Qt.rgba(0.3, 0.3, 0.3, 1.0)
-        }
-        
-        Model {
-            source: "#Cube"
-            materials: [
-                DefaultMaterial {
-                    diffuseColor: "red"
-                }
-            ]
-        }
-        
-        PerspectiveCamera {
-            z: 600
-        }
-    }
-}
-'''
-                        
-                        # 加载QML内容
-                        self.qml_engine.loadData(qml_content.encode())
-                        
-                        # 检查QML是否加载成功
-                        if self.qml_engine.rootObjects():
-                            print("✅ QML加载成功")
-                            self.status_label.setText("状态: QML View3D 已加载")
-                            
-                            # 将QML窗口添加到布局中
-                            qml_window = self.qml_engine.rootObjects()[0]
-                            qml_container = QWidget.createWindowContainer(qml_window)
-                            layout.addWidget(qml_container)
-                            
-                        else:
-                            print("❌ QML加载失败")
-                            self.status_label.setText("状态: QML加载失败")
-                            
-                            # 显示错误信息
-                            error_label = QLabel("QML加载失败，请检查PySide6.QtQuick3D模块")
-                            error_label.setStyleSheet("color: red; padding: 10px;")
-                            layout.addWidget(error_label)
-                            
-                    except Exception as e:
-                        print(f"⚠️ QML View3D创建失败: {e}")
-                        self.status_label.setText(f"状态: QML创建失败 - {str(e)}")
-                        
-                        # 显示错误信息
-                        error_label = QLabel(f"QML View3D创建失败: {str(e)}")
-                        error_label.setStyleSheet("color: red; padding: 10px;")
-                        layout.addWidget(error_label)
-                    
-                    # 添加控制按钮
-                    button_layout = QVBoxLayout()
-                    
-                    refresh_button = QPushButton("Refresh Status")
-                    refresh_button.clicked.connect(self.refresh_status)
-                    button_layout.addWidget(refresh_button)
-                    
-                    test_button = QPushButton("Test Quick3D")
-                    test_button.clicked.connect(self.test_quick3d)
-                    button_layout.addWidget(test_button)
-                    
-                    layout.addLayout(button_layout)
-                    
-                    # 设置布局
-                    central_widget.setLayout(layout)
-                    self.setCentralWidget(central_widget)
-                    
-                    # 设置定时器更新状态
-                    self.timer = QTimer()
-                    self.timer.timeout.connect(self.update_status)
-                    self.timer.start(1000)  # 每秒更新一次
-                    
-                    print("✅ Quick3D主窗口创建成功")
-                
-                def refresh_status(self):
-                    """刷新状态"""
-                    try:
-                        import bpy
-                        scene = bpy.context.scene
-                        
-                        # 检查渲染引擎
-                        if scene.render.engine == 'QUICK3D':
-                            self.status_label.setText("Render Engine: Quick3D ✓")
-                        else:
-                            self.status_label.setText(f"Render Engine: {scene.render.engine}")
-                            
-                    except Exception as e:
-                        self.status_label.setText(f"Error: {str(e)}")
-                
-                def test_quick3d(self):
-                    """测试Quick3D功能"""
-                    try:
-                        print("🧪 测试Quick3D功能...")
-                        self.status_label.setText("Testing Quick3D...")
-                        
-                        # 这里可以添加更多的Quick3D测试
-                        self.status_label.setText("Quick3D Test Complete ✓")
-                        
-                    except Exception as e:
-                        print(f"❌ Quick3D测试失败: {e}")
-                        self.status_label.setText(f"Test Failed: {str(e)}")
-                
-                def update_status(self):
-                    """更新状态"""
-                    try:
-                        import bpy
-                        scene = bpy.context.scene
-                        
-                        # 检查场景对象数量
-                        obj_count = len(bpy.data.objects)
-                        self.setWindowTitle(f"Quick3D Window - Objects: {obj_count}")
-                        
-                    except Exception as e:
-                        print(f"状态更新失败: {e}")
-                
-                def closeEvent(self, event):
-                    """窗口关闭事件"""
-                    self.timer.stop()
-                    print("Quick3D窗口已关闭")
-                    event.accept()
-            
-            return Quick3DMainWindow()
-            
-        except Exception as e:
-            print(f"❌ 创建Quick3D窗口失败: {e}")
-            raise
 
 class RENDER_PT_qt_quick3d_qml(Panel):
     """Qt Quick3D QML Functions Panel in Render Properties"""
@@ -2464,17 +1562,20 @@ class RENDER_PT_qt_quick3d_qml(Panel):
         box.label(text="Quick3D Window")
         
         row = box.row()
-        row.operator("qt_quick3d.open_quick_window", text="Open Quick3D Window")
+        row.operator("qt_quick3d.open_window", text="Open Quick3D Window")
 
 
 # 注册类
 classes = [
     QtQuick3DAddonPreferences,
+    ShowPySide6InfoOperator,
+    SwitchPySide6InstallationOperator,
     InstallPySide6Operator,
     RestartBlenderOperator,
     VIEW3D_PT_qt_quick3d_panel,
     RENDER_PT_qt_quick3d_qml,
     QT_QUICK3D_OT_open_window,
+    QT_QUICK3D_OT_toggle_debug_mode,
     QT_QUICK3D_OT_set_render_engine,
     # Balsam转换器操作符
     QT_QUICK3D_OT_balsam_convert_scene,
@@ -2488,8 +1589,6 @@ classes = [
     QT_QUICK3D_OT_balsam_open_qml,
     QT_QUICK3D_OT_balsam_cleanup,
     QT_QUICK3D_OT_search_local_balsam,
-    # Quick3D窗口操作符
-    QT_QUICK3D_OT_open_quick_window,
 ]
 
 # 不再需要单独的Balsam UI面板
@@ -2497,23 +1596,28 @@ print("✓ Balsam converter will be integrated into render properties panel")
 
 def register():
     # 加载balsam缓存
-    _load_balsam_cache()
+    path_manager.load_balsam_cache()
     
-    # 注册场景属性
+    # 注册场景属性（包含 work_space_path 等基础属性，并在内部调用 SceneEnvironment 注册）
     register_scene_properties()
     
     # 初始化全局balsam路径（基于默认选择）
-    global SELECTED_BALSAM_PATH
     try:
         # 获取默认场景的balsam版本选择
         if hasattr(bpy.context, 'scene') and bpy.context.scene:
             scene = bpy.context.scene
             selected = getattr(scene, 'balsam_version', 'AUTO')
             if selected != 'AUTO':
-                chosen = BALSAM_PATH_MAP.get(selected)
+                chosen = path_manager.BALSAM_PATH_MAP.get(selected)
                 if chosen and os.path.exists(chosen):
-                    SELECTED_BALSAM_PATH = chosen
+                    path_manager.set_selected_balsam_path(chosen)
                     print(f"✅ 初始化全局balsam路径: {chosen}")
+            else:
+                # 使用AUTO选择
+                auto_path = path_manager.find_balsam_executable()
+                if auto_path:
+                    path_manager.set_selected_balsam_path(auto_path)
+                    print(f"✅ 初始化AUTO balsam路径: {auto_path}")
     except Exception as e:
         print(f"⚠️ 初始化全局balsam路径失败: {e}")
     
@@ -2550,7 +1654,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
     
     # 注销场景属性
-    unregister_scene_properties()
+    scene_environment.unregister_scene_environment_properties()
     
     # 清理场景加载处理器 - 暂时注释掉，以后再实现
     # try:

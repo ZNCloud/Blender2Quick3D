@@ -10,22 +10,21 @@ import sys
 import os
 import bpy
 
-# 导入Balsam转换器模块以获取全局路径
+# 导入新的模块化组件
 try:
+    from . import path_manager
+    from . import scene_environment
     from . import balsam_gltf_converter
-    BALSAM_AVAILABLE = True
-except ImportError:
-    BALSAM_AVAILABLE = False
-    print("Warning: Balsam converter not available")
-
-# 导入QML处理器模块
-try:
     from . import qml_handler
-    QML_HANDLER_AVAILABLE = True
-    print("✅ QML处理器模块加载成功")
-except ImportError:
-    QML_HANDLER_AVAILABLE = False
-    print("Warning: QML handler not available")
+    MODULES_AVAILABLE = True
+    print("✅ 所有模块加载成功")
+except ImportError as e:
+    MODULES_AVAILABLE = False
+    print(f"Warning: 模块加载失败: {e}")
+
+# 兼容性检查
+BALSAM_AVAILABLE = MODULES_AVAILABLE
+QML_HANDLER_AVAILABLE = MODULES_AVAILABLE
 
 # 检查系统PySide6可用性
 def check_system_pyside6():
@@ -67,12 +66,17 @@ if check_system_pyside6():
         try:
             from PySide6.QtQuick3D import *
             QUICK3D_AVAILABLE = True
-            print("✓ PySide6.QtQuick3D 加载成功")
+            print("INFO: PySide6.QtQuick3D 加载成功")
         except ImportError as e:
-            print(f"⚠️  PySide6.QtQuick3D 加载失败: {e}")
+            QUICK3D_AVAILABLE = False
+            print(f"ERROR: PySide6.QtQuick3D 加载失败: {e}")
+            print(f"INFO: 可能的原因:")
+            print(f"  1. PySide6版本不支持QtQuick3D")
+            print(f"  2. QtQuick3D模块未安装")
+            print(f"  3. 环境配置问题")
         
         QT_AVAILABLE = True
-        print("✓ 系统PySide6 加载成功")
+        print("INFO: 系统PySide6 加载成功")
         
     except ImportError as e:
         print(f"✗ 系统PySide6加载失败: {e}")
@@ -185,7 +189,6 @@ def show_quick3d_window():
                                 print(f"🔍 路径验证:")
                                 print(f"  当前工作目录: {os.getcwd()}")
                                 print(f"  QML Base URL: {base_url.toString()}")
-                                print(f"  期望的mesh路径: {os.path.join(qml_output_dir, 'meshes', 'suzanne_mesh.mesh')}")
                                 
                             else:
                                 print(f"⚠️ QML输出目录不存在: {qml_output_dir}")
@@ -286,19 +289,31 @@ Window {{
                             if not qml_output_dir:
                                 qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
                             
-                            mesh_file = os.path.join(qml_output_dir, "meshes", "suzanne_mesh.mesh")
-                            print(f"🔍 路径调试信息:")
-                            print(f"  QML输出目录: {qml_output_dir}")
-                            print(f"  Mesh文件路径: {mesh_file}")
-                            print(f"  Mesh文件存在: {'✅' if os.path.exists(mesh_file) else '❌'}")
-                            print(f"  QML内容中的路径: meshes/suzanne_mesh.mesh")
-                            print(f"  期望的完整路径: {os.path.abspath(os.path.join(qml_output_dir, 'meshes', 'suzanne_mesh.mesh'))}")
+                            # 调试信息：检查QML输出目录
+                            try:
+                                if not qml_output_dir:
+                                    qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                                
+                                print(f"🔍 QML路径信息:")
+                                print(f"  QML输出目录: {qml_output_dir}")
+                                print(f"  QML目录存在: {'✅' if os.path.exists(qml_output_dir) else '❌'}")
+                            except Exception as e:
+                                print(f"⚠️ 路径调试失败: {e}")
                         except Exception as e:
                             print(f"⚠️ 路径调试失败: {e}")
                     
+                    # 检查QtQuick3D是否可用
+                    if not QUICK3D_AVAILABLE:
+                        print("ERROR: QtQuick3D模块不可用，无法加载3D内容")
+                        error_label = QLabel("QtQuick3D模块不可用\n请检查PySide6版本是否支持QtQuick3D")
+                        error_label.setStyleSheet("color: red; padding: 10px; font-size: 12px;")
+                        error_label.setAlignment(Qt.AlignCenter)
+                        layout.addWidget(error_label)
+                        return
+                    
                     # 检查QML是否加载成功
                     if self.qml_engine.rootObjects():
-                        print("✅ QML加载成功")
+                        print("INFO: QML加载成功")
                         
                         # 将QML窗口添加到布局中，占满整个窗口
                         qml_window = self.qml_engine.rootObjects()[0]
@@ -307,12 +322,21 @@ Window {{
                         layout.addWidget(qml_container)
                         
                     else:
-                        print("❌ QML加载失败")
+                        print("ERROR: QML加载失败")
                         
-                        # 显示错误信息
-                        error_label = QLabel("QML加载失败，请检查PySide6.QtQuick3D模块")
-                        error_label.setStyleSheet("color: red; padding: 10px;")
+                        # 显示详细的错误信息
+                        error_text = "QML加载失败\n\n可能的原因:\n"
+                        if not QUICK3D_AVAILABLE:
+                            error_text += "• QtQuick3D模块不可用\n"
+                        error_text += "• QML语法错误\n"
+                        error_text += "• 文件路径问题\n"
+                        error_text += "• PySide6版本不兼容\n\n"
+                        error_text += "请检查控制台输出的详细错误信息"
+                        
+                        error_label = QLabel(error_text)
+                        error_label.setStyleSheet("color: red; padding: 15px; font-size: 11px;")
                         error_label.setAlignment(Qt.AlignCenter)
+                        error_label.setWordWrap(True)
                         layout.addWidget(error_label)
                     
 

@@ -42,19 +42,19 @@ def get_world_surface_connected_image_paths() -> Dict[str, str]:
         # 获取当前场景的world
         world = bpy.context.scene.world
         if not world:
-            print("❌ 当前场景没有world")
+            print("ERROR: 当前场景没有world")
             return result
         
         result['world_name'] = world.name
-        print(f"🌍 检查World: {world.name}")
+        print(f"INFO: 检查World: {world.name}")
         
         # 检查world是否有节点树
         if not world.use_nodes or not world.node_tree:
-            print("❌ World没有启用节点或没有节点树")
+            print("ERROR: World没有启用节点或没有节点树")
             return result
         
         node_tree = world.node_tree
-        print(f"🌳 World节点树: {node_tree.name}")
+        print(f"INFO: World节点树: {node_tree.name}")
         
         # 查找World Output节点
         world_output = None
@@ -64,52 +64,52 @@ def get_world_surface_connected_image_paths() -> Dict[str, str]:
                 break
         
         if not world_output:
-            print("❌ 未找到World Output节点")
+            print("ERROR: 未找到World Output节点")
             return result
         
-        print(f"🔌 找到World Output节点: {world_output.name}")
+        print(f"INFO: 找到World Output节点: {world_output.name}")
         
         # 检查surface输入连接
         surface_input = world_output.inputs.get('Surface')
         if surface_input and surface_input.is_linked:
             result['has_surface_connection'] = True
-            print(f"✅ Surface输入已连接")
+            print(f"INFO: Surface输入已连接")
             
             # 获取连接的节点
             surface_node = surface_input.links[0].from_node
             result['surface_node_type'] = surface_node.type
-            print(f"🔗 Surface连接节点: {surface_node.name} (类型: {surface_node.type})")
+            print(f"INFO: Surface连接节点: {surface_node.name} (类型: {surface_node.type})")
             
             # 根据节点类型获取图像路径
             surface_image_path = _get_image_path_from_node(surface_node)
             if surface_image_path:
                 result['surface_image'] = surface_image_path
-                print(f"🖼️ Surface图像路径: {surface_image_path}")
+                print(f"INFO: Surface图像路径: {surface_image_path}")
             else:
-                print("⚠️ 无法从Surface节点获取图像路径")
+                print("WARNING: 无法从Surface节点获取图像路径")
         else:
-            print("❌ Surface输入未连接")
+            print("ERROR: Surface输入未连接")
         
         # 检查environment输入连接（如果存在）
         environment_input = world_output.inputs.get('Environment')
         if environment_input and environment_input.is_linked:
             result['has_environment_connection'] = True
-            print(f"✅ Environment输入已连接")
+            print(f"INFO: Environment输入已连接")
             
             # 获取连接的节点
             environment_node = environment_input.links[0].from_node
             result['environment_node_type'] = environment_node.type
-            print(f"🔗 Environment连接节点: {environment_node.name} (类型: {environment_node.type})")
+            print(f"INFO: Environment连接节点: {environment_node.name} (类型: {environment_node.type})")
             
             # 根据节点类型获取图像路径
             environment_image_path = _get_image_path_from_node(environment_node)
             if environment_image_path:
                 result['environment_image'] = environment_image_path
-                print(f"🌍 Environment图像路径: {environment_image_path}")
+                print(f"INFO: Environment图像路径: {environment_image_path}")
             else:
-                print("⚠️ 无法从Environment节点获取图像路径")
+                print("WARNING: 无法从Environment节点获取图像路径")
         else:
-            print("❌ Environment输入未连接")
+            print("ERROR: Environment输入未连接")
         
         # 注意：我们不再在整个节点树中搜索环境图节点
         # 只查找与world surface有直接或间接连接的图像
@@ -122,18 +122,18 @@ def get_world_surface_connected_image_paths() -> Dict[str, str]:
             if result['environment_image']:
                 _, ext = os.path.splitext(result['environment_image'])
                 result['ibl_path'] = f"maps/iblimage{ext}"
-                print(f"🌍 设置IBL路径: {result['ibl_path']}")
+                print(f"INFO: 设置IBL路径: {result['ibl_path']}")
             elif result['surface_image']:
                 _, ext = os.path.splitext(result['surface_image'])
                 result['ibl_path'] = f"maps/iblimage{ext}"
-                print(f"🖼️ 设置IBL路径: {result['ibl_path']}")
+                print(f"INFO: 设置IBL路径: {result['ibl_path']}")
         else:
-            print("ℹ️ 没有IBL图像")
+            print("INFO: 没有IBL图像")
         
         return result
         
     except Exception as e:
-        print(f"❌ 获取world surface连接图像路径失败: {e}")
+        print(f"ERROR: 获取world surface连接图像路径失败: {e}")
         import traceback
         traceback.print_exc()
         return result
@@ -155,13 +155,13 @@ def _get_image_path_from_node(node, visited_nodes=None) -> Optional[str]:
     
     # 避免循环访问
     if node in visited_nodes:
-        print(f"⚠️ 检测到循环访问节点: {node.name}")
+        print(f"WARNING: 检测到循环访问节点: {node.name}")
         return None
     
     visited_nodes.add(node)
     
     try:
-        print(f"🔍 检查节点: {node.name} (类型: {node.type})")
+        print(f"INFO: 检查节点: {node.name} (类型: {node.type})")
         
         # 处理不同类型的节点
         if node.type == 'TEX_ENVIRONMENT':
@@ -172,15 +172,15 @@ def _get_image_path_from_node(node, visited_nodes=None) -> Optional[str]:
                     # 转换为绝对路径
                     abs_path = bpy.path.abspath(image.filepath)
                     if os.path.exists(abs_path):
-                        print(f"✅ 找到环境图: {abs_path}")
+                        print(f"INFO: 找到环境图: {abs_path}")
                         return abs_path
                     else:
-                        print(f"⚠️ 环境图文件不存在: {abs_path}")
+                        print(f"WARNING: 环境图文件不存在: {abs_path}")
                         return image.filepath  # 返回原始路径
                 else:
-                    print("⚠️ 环境图节点没有文件路径")
+                    print("WARNING: 环境图节点没有文件路径")
             else:
-                print("⚠️ 环境图节点没有图像")
+                print("WARNING: 环境图节点没有图像")
         
         elif node.type == 'TEX_IMAGE':
             # 图像纹理节点
@@ -362,24 +362,44 @@ def get_balsam_output_base_dir() -> Optional[str]:
         Optional[str]: 输出基础目录路径，如果获取失败则返回None
     """
     try:
-        # 尝试导入balsam转换器模块
+        # 尝试导入balsam_gltf_converter模块
         from . import balsam_gltf_converter
         
-        # 获取输出基础目录
-        output_base_dir = balsam_gltf_converter.get_output_base_dir()
+        # 获取QML输出基础目录
+        output_base_dir = balsam_gltf_converter.get_qml_output_dir()
         
         if output_base_dir and os.path.exists(output_base_dir):
-            print(f"✅ 获取到Balsam输出基础目录: {output_base_dir}")
+            print(f"INFO: 获取到输出基础目录: {output_base_dir}")
             return output_base_dir
         else:
-            print(f"⚠️ Balsam输出基础目录不存在: {output_base_dir}")
+            print(f"WARNING: 输出基础目录不存在: {output_base_dir}")
+            # 尝试创建目录
+            if output_base_dir:
+                try:
+                    os.makedirs(output_base_dir, exist_ok=True)
+                    print(f"INFO: 创建输出基础目录: {output_base_dir}")
+                    return output_base_dir
+                except Exception as e:
+                    print(f"ERROR: 创建输出基础目录失败: {e}")
             return None
             
     except ImportError as e:
-        print(f"❌ 无法导入balsam_gltf_converter模块: {e}")
-        return None
+        print(f"ERROR: 无法导入balsam_gltf_converter模块: {e}")
+        # 回退到原来的方法
+        try:
+            from . import balsam_gltf_converter
+            output_base_dir = balsam_gltf_converter.get_output_base_dir()
+            if output_base_dir and os.path.exists(output_base_dir):
+                print(f"INFO: 获取到Balsam输出基础目录: {output_base_dir}")
+                return output_base_dir
+            else:
+                print(f"WARNING: Balsam输出基础目录不存在: {output_base_dir}")
+                return None
+        except Exception as e2:
+            print(f"ERROR: 回退方法也失败: {e2}")
+            return None
     except Exception as e:
-        print(f"❌ 获取Balsam输出基础目录失败: {e}")
+        print(f"ERROR: 获取输出基础目录失败: {e}")
         return None
 
 
@@ -404,9 +424,11 @@ def copy_world_image_to_balsam_output(image_path: str, output_base_dir: str = No
         if output_base_dir is None:
             base = get_balsam_output_base_dir()
             if not base:
-                print("❌ 无法获取Balsam输出基础目录")
+                print("❌ 无法获取输出基础目录")
                 return None
+            # 确保maps目录在输出基础目录下
             output_base_dir = os.path.join(base, "maps")
+            print(f"📁 使用输出目录: {output_base_dir}")
         
         # 确保输出目录存在
         os.makedirs(output_base_dir, exist_ok=True)
@@ -421,14 +443,72 @@ def copy_world_image_to_balsam_output(image_path: str, output_base_dir: str = No
         new_filename = f"iblimage{ext}"
         dest_path = os.path.join(output_base_dir, new_filename)
         
+        # 如果目标文件存在且被占用，尝试使用不同的文件名
+        original_dest_path = dest_path
+        
+        # 检查目标文件是否已存在且被占用
+        if os.path.exists(dest_path):
+            try:
+                # 尝试删除现有文件
+                os.remove(dest_path)
+                print(f"🗑️ 删除现有文件: {dest_path}")
+            except PermissionError:
+                print(f"⚠️ 无法删除现有文件，可能被其他程序占用: {dest_path}")
+                # 尝试重命名现有文件为备份
+                backup_path = dest_path + ".backup"
+                
+                # 如果备份文件也存在，先删除它
+                if os.path.exists(backup_path):
+                    try:
+                        os.remove(backup_path)
+                        print(f"🗑️ 删除现有备份文件: {backup_path}")
+                    except PermissionError:
+                        print(f"⚠️ 无法删除现有备份文件: {backup_path}")
+                        # 生成唯一的备份文件名
+                        import time
+                        timestamp = int(time.time())
+                        backup_path = f"{dest_path}.backup_{timestamp}"
+                        print(f"📦 使用唯一备份文件名: {backup_path}")
+                
+                try:
+                    os.rename(dest_path, backup_path)
+                    print(f"📦 备份现有文件: {backup_path}")
+                except PermissionError:
+                    print(f"❌ 无法备份现有文件，尝试使用新文件名")
+                    # 使用带时间戳的新文件名
+                    import time
+                    timestamp = int(time.time())
+                    base_name = os.path.splitext(new_filename)[0]
+                    new_filename = f"{base_name}_{timestamp}{ext}"
+                    dest_path = os.path.join(output_base_dir, new_filename)
+                    print(f"📝 使用新文件名: {new_filename}")
+                except Exception as e:
+                    print(f"❌ 备份文件时出错: {e}")
+                    # 使用带时间戳的新文件名
+                    import time
+                    timestamp = int(time.time())
+                    base_name = os.path.splitext(new_filename)[0]
+                    new_filename = f"{base_name}_{timestamp}{ext}"
+                    dest_path = os.path.join(output_base_dir, new_filename)
+                    print(f"📝 使用新文件名: {new_filename}")
+            except Exception as e:
+                print(f"⚠️ 处理现有文件时出错: {e}")
+        
         # 复制文件
-        shutil.copy2(image_path, dest_path)
-        
-        print(f"✅ 图像复制成功:")
-        print(f"  源文件: {image_path}")
-        print(f"  目标文件: {dest_path}")
-        
-        return dest_path
+        try:
+            shutil.copy2(image_path, dest_path)
+            print(f"✅ 图像复制成功:")
+            print(f"  源文件: {image_path}")
+            print(f"  目标文件: {dest_path}")
+            return dest_path
+        except PermissionError as e:
+            print(f"❌ 复制失败 - 权限不足: {e}")
+            print(f"  目标路径: {dest_path}")
+            print(f"  建议: 检查文件是否被其他程序占用，或尝试以管理员权限运行")
+            return None
+        except Exception as e:
+            print(f"❌ 复制图像文件失败: {e}")
+            return None
         
     except Exception as e:
         print(f"❌ 复制图像文件失败: {e}")
@@ -470,15 +550,18 @@ def copy_all_world_images_to_balsam_output(output_base_dir: str = None) -> Dict[
         if output_base_dir is None:
             base = get_balsam_output_base_dir()
             if not base:
-                print("❌ 无法获取Balsam输出基础目录")
+                print("❌ 无法获取输出基础目录")
                 return result
+            # 确保maps目录在输出基础目录下
             output_base_dir = os.path.join(base, "maps")
+            print(f"📁 使用输出目录: {output_base_dir}")
         
         result['output_base_dir'] = output_base_dir
         
         # 复制surface图像
         if world_info['surface_image']:
             print(f"\n🖼️ 复制Surface图像...")
+            print(f"  源文件: {world_info['surface_image']}")
             surface_dest = copy_world_image_to_balsam_output(
                 world_info['surface_image'], 
                 output_base_dir
@@ -489,12 +572,18 @@ def copy_all_world_images_to_balsam_output(output_base_dir: str = None) -> Dict[
                 print(f"✅ Surface图像复制成功: {surface_dest}")
             else:
                 print("❌ Surface图像复制失败")
+                print("   可能原因:")
+                print("   1. 目标文件被其他程序占用（如Qt Creator、文件管理器等）")
+                print("   2. 权限不足")
+                print("   3. 磁盘空间不足")
+                print("   建议: 关闭可能占用文件的程序，或尝试以管理员权限运行")
         else:
             print("ℹ️ 没有Surface图像需要复制")
         
         # 复制environment图像
         if world_info['environment_image']:
             print(f"\n🌍 复制Environment图像...")
+            print(f"  源文件: {world_info['environment_image']}")
             environment_dest = copy_world_image_to_balsam_output(
                 world_info['environment_image'], 
                 output_base_dir
@@ -505,6 +594,11 @@ def copy_all_world_images_to_balsam_output(output_base_dir: str = None) -> Dict[
                 print(f"✅ Environment图像复制成功: {environment_dest}")
             else:
                 print("❌ Environment图像复制失败")
+                print("   可能原因:")
+                print("   1. 目标文件被其他程序占用（如Qt Creator、文件管理器等）")
+                print("   2. 权限不足")
+                print("   3. 磁盘空间不足")
+                print("   建议: 关闭可能占用文件的程序，或尝试以管理员权限运行")
         else:
             print("ℹ️ 没有Environment图像需要复制")
         

@@ -21,6 +21,24 @@ except ImportError:
     BLENDER_AVAILABLE = False
     print(" Blender环境不可用 使用默认设置")
 
+# 全局调试开关 - 可以通过环境变量控制
+import os
+DEFAULT_DEBUG_MODE = os.environ.get('BLENDER2QUICK3D_DEBUG', 'false').lower() == 'true'
+
+def enable_qml_debug_mode():
+    """启用QML调试模式（打印完整QML内容）"""
+    os.environ['BLENDER2QUICK3D_DEBUG'] = 'true'
+    global DEFAULT_DEBUG_MODE
+    DEFAULT_DEBUG_MODE = True
+    print("INFO: QML调试模式已启用")
+
+def disable_qml_debug_mode():
+    """禁用QML调试模式（使用简化日志）"""
+    os.environ['BLENDER2QUICK3D_DEBUG'] = 'false'
+    global DEFAULT_DEBUG_MODE
+    DEFAULT_DEBUG_MODE = False
+    print("INFO: QML调试模式已禁用")
+
 class QMLHandler:
     """QML处理器类"""
     
@@ -29,6 +47,20 @@ class QMLHandler:
         self.qml_content = None
         self.assembled_qml = None
         self.scene_settings = {}
+        # 调试开关 - 控制是否打印完整的QML内容
+        self.debug_print_full_qml = False
+    
+    def set_debug_mode(self, enable_full_qml_print=False):
+        """设置调试模式
+        
+        Args:
+            enable_full_qml_print (bool): 是否打印完整的QML内容
+        """
+        self.debug_print_full_qml = enable_full_qml_print
+        if enable_full_qml_print:
+            print("INFO: 启用完整QML内容打印模式")
+        else:
+            print("INFO: 启用简化日志模式")
         
     def setup_environment(self):
         """设置环境，获取QML输出目录"""
@@ -263,6 +295,8 @@ class QMLHandler:
             settings['wasd_y_invert'] = getattr(scene, 'qtquick3d_wasd_y_invert', True)
             settings['wasd_keys_enabled'] = getattr(scene, 'qtquick3d_wasd_keys_enabled', True)
             settings['wasd_accepted_buttons'] = getattr(scene, 'qtquick3d_wasd_accepted_buttons', 'LEFT')
+            settings['wasd_controlled_object'] = getattr(scene, 'qtquick3d_wasd_controlled_object', "")
+            settings['wasd_inputs_need_processing'] = getattr(scene, 'qtquick3d_wasd_inputs_need_processing', True)
             
             self.scene_settings = settings
             print(f"✅ 成功读取场景属性，共 {len(settings)} 个设置")
@@ -347,6 +381,68 @@ class QMLHandler:
             x, y, w, h = rect_tuple[:4]
             return f"Qt.rect({x}, {y}, {w}, {h})"
         return "Qt.rect(0, 0, 1, 1)"
+    
+    def fix_qml_compatibility_issues(self, qml_content):
+        # """修复QML兼容性问题"""
+        # try:
+        #     print("INFO: 开始修复QML兼容性问题...")
+            
+        #     # 修复常见的不兼容语法
+        #     fixes_applied = []
+            
+        #     # 1. 修复QQuick3DTexture引用
+        #     if "QQuick3DTexture*" in qml_content:
+        #         qml_content = qml_content.replace("QQuick3DTexture*", "Texture")
+        #         fixes_applied.append("修复QQuick3DTexture*引用")
+            
+        #     # 2. 修复不兼容的Texture语法
+        #     # 将 Texture { source: "..." } 替换为简单的字符串路径
+        #     import re
+            
+        #     # 匹配 Texture { source: "path" } 模式
+        #     texture_pattern = r'Texture\s*\{\s*source:\s*"([^"]+)"\s*\}'
+        #     matches = re.findall(texture_pattern, qml_content)
+        #     for match in matches:
+        #         old_text = f'Texture {{ source: "{match}" }}'
+        #         new_text = f'"{match}"'
+        #         qml_content = qml_content.replace(old_text, new_text)
+        #         fixes_applied.append(f"修复Texture对象: {match}")
+            
+        #     # 3. 修复其他可能的问题
+        #     # 只移除特定的不兼容属性模式，更加精确的匹配
+        #     problematic_patterns = [
+        #         # 匹配具体的属性定义模式 - 只移除明确的属性定义
+        #         (r'^\s*property\s+url\s+textureData\s*:.*$', "移除textureData属性定义"),
+        #         (r'^\s*property\s+url\s+textureCoordinate\s*:.*$', "移除textureCoordinate属性定义"),
+        #         (r'^\s*property\s+url\s+vertexData\s*:.*$', "移除vertexData属性定义"),
+        #         # 匹配具体的属性赋值模式 - 只移除明确的属性赋值
+        #         (r'^\s*textureData\s*:\s*"[^"]*"\s*$', "移除textureData属性赋值"),
+        #         (r'^\s*textureCoordinate\s*:\s*"[^"]*"\s*$', "移除textureCoordinate属性赋值"),
+        #         (r'^\s*vertexData\s*:\s*"[^"]*"\s*$', "移除vertexData属性赋值"),
+        #     ]
+            
+        #     for pattern, description in problematic_patterns:
+        #         matches = re.findall(pattern, qml_content, re.MULTILINE)
+        #         if matches:
+        #             qml_content = re.sub(pattern, '', qml_content, flags=re.MULTILINE)
+        #             fixes_applied.append(description)
+        #             print(f"INFO: {description} - 找到 {len(matches)} 个匹配")
+            
+        #     # 4. 清理多余的空行
+        #     qml_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', qml_content)
+            
+        #     if fixes_applied:
+        #         print(f"INFO: 应用了 {len(fixes_applied)} 个兼容性修复:")
+        #         for fix in fixes_applied:
+        #             print(f"  - {fix}")
+        #     else:
+        #         print("INFO: 没有发现需要修复的兼容性问题")
+            
+        #     return qml_content
+            
+        # except Exception as e:
+        #     print(f"ERROR: 修复QML兼容性问题失败: {e}")
+            return qml_content
     
     def get_antialiasing_mode_qml(self, mode):
         """获取抗锯齿模式的QML字符串"""
@@ -439,6 +535,9 @@ class QMLHandler:
             # 生成SceneEnvironment QML字符串
             scene_environment_qml = self.generate_scene_environment_qml(settings)
             
+            # 清理QML内容，修复兼容性问题
+            cleaned_qml_content = self.fix_qml_compatibility_issues(cleaned_qml_content)
+            
             # 创建完整的QML内容
             head_qml = """"""
             complete_qml = f'''
@@ -465,9 +564,9 @@ Window {{
     {wasd_controller_qml}
 }}'''
             
-            print(f"✅ 成功组装完整QML内容")
-            print(f"  📊 组装后长度: {len(complete_qml)} 字符")
-            print(f"  📊 View3D尺寸: {settings['view3d_width']}x{settings['view3d_height']}")
+         #   print(f"✅ 成功组装完整QML内容")
+         #   print(f"  📊 组装后长度: {len(complete_qml)} 字符")
+         #   print(f"  📊 View3D尺寸: {settings['view3d_width']}x{settings['view3d_height']}")
             
             self.assembled_qml = head_qml + complete_qml
             return self.assembled_qml
@@ -611,10 +710,57 @@ Window {{
                 qml_parts.append(f"probeExposure: {settings['probe_exposure']}")
             if settings['probe_horizon'] != 0.0:
                 qml_parts.append(f"probeHorizon: {settings['probe_horizon']}")
+            if settings['probe_orientation'] != (0.0, 0.0, 0.0):
+                qml_parts.append(f"probeOrientation: {self.convert_vector3d_to_qml(settings['probe_orientation'])}")
+            
+            # 天空盒
+            if settings['skybox_cubemap']:
+                qml_parts.append(f"skyBoxCubeMap: \"{settings['skybox_cubemap']}\"")
+            
+            if settings['skybox_blur_amount'] > 0.0:
+                qml_parts.append(f"skyboxBlurAmount: {settings['skybox_blur_amount']}")
+            
+            # 抗锯齿高级设置
+            if settings['specular_aa_enabled']:
+                qml_parts.append(f"specularAAEnabled: true")
+            if settings['temporal_aa_enabled']:
+                qml_parts.append(f"temporalAAEnabled: true")
+                qml_parts.append(f"temporalAAStrength: {settings['temporal_aa_strength']}")
             
             # 色调映射
             if settings['tonemap_mode'] != 0:
                 qml_parts.append(f"tonemapMode: {self.get_tonemap_mode_qml(settings['tonemap_mode'])}")
+            
+            # 顺序无关透明度
+            if settings['oit_method'] != 0:
+                qml_parts.append(f"oitMethod: {self.get_oit_method_qml(settings['oit_method'])}")
+            
+            # 光照探针 - 优先使用IBL路径
+            if settings.get('has_ibl', False) and settings.get('ibl_path'):
+                qml_parts.append(f'lightProbe: Texture {{ source: "{settings["ibl_path"]}" }}')
+                print(f"🌍 使用IBL图像作为光照探针: {settings['ibl_path']}")
+            elif settings['light_probe']:
+                qml_parts.append(f'lightProbe: "{settings["light_probe"]}"')
+            
+            # 光照映射器
+            if settings['lightmapper'] != 0:
+                qml_parts.append(f"lightmapper: {settings['lightmapper']}")
+            
+            # 裁剪矩形（仅在启用时写入）
+            if settings.get('scissor_enabled', False):
+                qml_parts.append(f"scissorRect: {self.convert_rect_to_qml(settings['scissor_rect'])}")
+            
+            # 雾效
+            if settings['fog']:
+                qml_parts.append(f"fog: \"{settings['fog']}\"")
+            
+            # 调试设置
+            if settings['debug_settings']:
+                qml_parts.append(f"debugSettings: \"{settings['debug_settings']}\"")
+            
+            # 效果
+            if settings['effects']:
+                qml_parts.append(f"effects: \"{settings['effects']}\"")
             
             # ExtendedSceneEnvironment特有属性
             
@@ -887,7 +1033,13 @@ Window {{
         if not self.assembled_qml:
             print("❌ 没有组装好的QML内容")
             return None
-        print("self.assembled_qml as below: ",self.assembled_qml)
+        
+        # 根据调试开关决定是否打印完整的QML内容
+        if self.debug_print_full_qml:
+            print("self.assembled_qml as below: ",self.assembled_qml)
+        else:
+            print(f"✅ 获取到组装好的QML内容，长度: {len(self.assembled_qml)} 字符")
+        
         return self.assembled_qml
     
     def get_qml_as_bytes(self):
@@ -915,11 +1067,21 @@ def process_qml_for_qt_quick3d(qml_file_path=None, scene_name=None):
     else:
         return None
 
-def get_qml_content_for_integration():
-    """获取用于集成的QML内容（主要接口函数）"""
+def get_qml_content_for_integration(debug_mode=None):
+    """获取用于集成的QML内容（主要接口函数）
+    
+    Args:
+        debug_mode (bool, optional): 是否启用调试模式，打印完整的QML内容。
+                                    如果为None，则使用全局调试设置。
+    """
     try:
         # 创建处理器并处理QML文件
         handler = QMLHandler()
+        
+        # 设置调试模式
+        if debug_mode is None:
+            debug_mode = DEFAULT_DEBUG_MODE
+        handler.set_debug_mode(debug_mode)
         
         # 自动处理QML文件
         if handler.process_qml_file():
