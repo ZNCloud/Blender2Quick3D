@@ -165,63 +165,9 @@ class BalsamGLTFToQMLConverter:
             return False
 
     def _find_balsam_executable(self):
-        """查找balsam可执行文件，优先使用系统已安装的版本"""
-        # 1. 优先使用全局选定的balsam路径（用户手动选择的）
-        try:
-            # 直接导入模块并获取全局变量
-            import sys
-            addon_name = 'Blender2Quick3D'
-            
-            if addon_name in sys.modules:
-                addon_main = sys.modules[addon_name]
-                selected_path = getattr(addon_main, 'SELECTED_BALSAM_PATH', None)
-                print(f"🔍 全局选定的balsam路径: {selected_path}")
-                
-                if selected_path and os.path.exists(selected_path):
-                    print(f"✅ 使用全局选定的balsam版本: {selected_path}")
-                    # 存储选定的路径，环境变量将在调用时设置
-                    return selected_path
-                else:
-                    print(f"❌ 全局选定的路径无效或为空: {selected_path}")
-            else:
-                print(f"❌ 无法找到插件模块: {addon_name}")
-        except Exception as e:
-            print(f"❌ 获取全局选定路径失败: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # 2. 检查系统PATH中的balsam（系统安装的版本）
-        try:
-            result = subprocess.run(['where', 'balsam.exe'], 
-                                  capture_output=True, text=True, shell=True)
-            if result.returncode == 0:
-                path = result.stdout.strip().split('\n')[0]
-                print(f"✅ 在系统PATH中找到balsam: {path}")
-                return path
-        except:
-            pass
-
-        # 3. 扫描 C:/Qt 目录（系统Qt安装）
-        try:
-            from . import __init__ as addon_main
-            if hasattr(addon_main, '_scan_qt_balsam_paths'):
-                candidates = addon_main._scan_qt_balsam_paths()
-                if candidates:
-                    # mingw优先
-                    mingw = [p for p in candidates if 'mingw' in p.lower()]
-                    if mingw:
-                        print(f"✅ 扫描C:/Qt找到mingw balsam: {mingw[0]}")
-                        return mingw[0]
-                    # 回退msvc
-                    print(f"✅ 扫描C:/Qt找到balsam: {candidates[0]}")
-                    return candidates[0]
-        except Exception as e:
-            print(f"扫描C:/Qt失败: {e}")
-
-        # 4. 不再检查插件目录，只使用系统安装的balsam
-        
-        print("❌ 未找到balsam可执行文件")
-        return None
+        """查找balsam可执行文件，使用path_manager模块"""
+        # 使用path_manager模块统一管理balsam路径
+        return path_manager.find_balsam_executable()
     
     def _get_qt_environment_for_path(self, balsam_path):
         """为选定的balsam路径获取正确的Qt环境变量（不修改系统环境）"""
@@ -312,28 +258,110 @@ class BalsamGLTFToQMLConverter:
                 
         except Exception as e:
             print(f"  ⚠️  帮助信息测试失败: {e}")
+    
+    def _generate_qmldir_if_needed(self):
+        """
+        如果设置了 qmlproject，在 workspace 下生成 qmldir 文件
+        
+        qmldir 格式：
+        module Generated.QtQuick3D.AssetFolderName
+        ComponentName 1.0 ComponentName.qml
+        """
+        try:
+            # 检查是否设置了 qmlproject
+            scene = bpy.context.scene
+            qmlproject_path = getattr(scene, "qmlproject_path", None)
+            
+            if not qmlproject_path or not os.path.exists(qmlproject_path):
+                print("ℹ️ 未设置 QMLProject，跳过 qmldir 生成")
+                return
+            
+            # 使用实际的输出目录（当前转换的工作空间）
+            workspace_path = self.qml_output_dir or self.output_base_dir
+            
+            if not workspace_path or not os.path.exists(workspace_path):
+                print(f"⚠️ 工作空间路径不存在: {workspace_path}")
+                return
+            
+            # 获取 Asset Folder 名称（文件夹名）- 从实际的输出路径获取
+            asset_folder_name = getattr(scene, "qmlproject_assets_folder", None)
+            if not asset_folder_name or asset_folder_name in ["NONE", "EMPTY", "ERROR"]:
+                # 如果没有选择，使用实际输出文件夹的名称
+                asset_folder_name = os.path.basename(workspace_path)
+            
+            print(f"📦 使用 Asset Folder 名称: {asset_folder_name}")
+            print(f"📁 实际工作空间路径: {workspace_path}")
+            
+            # 查找实际生成的 QML 文件
+            qml_files = [f for f in os.listdir(workspace_path) if f.endswith('.qml')]
+            
+            if not qml_files:
+                print("⚠️ 工作空间中未找到 QML 文件，跳过 qmldir 生成")
+                return
+            
+            # 使用第一个找到的 QML 文件（通常只有一个主 QML 文件）
+            qml_file = qml_files[0]
+            qml_component_name = os.path.splitext(qml_file)[0]  # 移除 .qml 扩展名
+            
+            print(f"📄 检测到 QML 文件: {qml_file}")
+            print(f"📦 组件名称: {qml_component_name}")
+            
+            # 生成 qmldir 文件路径
+            qmldir_path = os.path.join(workspace_path, "qmldir")
+            
+            # 生成 qmldir 内容 - 使用 Asset Folder 名称作为模块名
+            qmldir_content = f"""module Generated.QtQuick3D.{asset_folder_name}
+{qml_component_name} 1.0 {qml_file}
+"""
+            
+            # 写入 qmldir 文件
+            with open(qmldir_path, 'w', encoding='utf-8') as f:
+                f.write(qmldir_content)
+            
+            print(f"✅ qmldir 文件已生成: {qmldir_path}")
+            print(f"📦 模块名称: Generated.QtQuick3D.{asset_folder_name}")
+            print(f"📄 QML 组件: {qml_component_name} 1.0 {qml_file}")
+            
+        except Exception as e:
+            print(f"⚠️ 生成 qmldir 文件失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 不影响主流程，只是警告
         
     def export_scene_to_gltf(self):
         """导出场景为GLTF格式"""
         try:
-            # 按照当前blender文件名称命名 .gltf；如果包含中文字符就保存为scene.gltf
+            # 优先使用 Asset Folder 名称，其次使用 Blender 文件名
             import re
-
-            def contains_chinese(text):
-                return any('\u4e00' <= char <= '\u9fff' for char in text)
-
-            # 获取当前blender文件名（不含扩展名）
-            blend_filepath = bpy.data.filepath
-            if blend_filepath:
-                blend_filename = os.path.splitext(os.path.basename(blend_filepath))[0]
-                if contains_chinese(blend_filename):
-                    gltf_filename = "scene.gltf"
-                else:
-                    # 只允许合法文件名字符
-                    safe_name = re.sub(r'[^\w\-\.]', '_', blend_filename)
-                    gltf_filename = f"{safe_name}.gltf"
+            
+            scene = bpy.context.scene
+            asset_folder_name = getattr(scene, "qmlproject_assets_folder", None)
+            
+            # 如果设置了 Asset Folder 且不是特殊值，使用它作为文件名
+            if asset_folder_name and asset_folder_name not in ["NONE", "EMPTY", "ERROR"]:
+                gltf_filename = f"{asset_folder_name}.gltf"
+                print(f"📦 使用 Asset Folder 名称作为 GLTF 文件名: {gltf_filename}")
             else:
-                gltf_filename = "scene.gltf"
+                # 否则按照当前blender文件名称命名；如果包含中文字符就保存为scene.gltf
+                def contains_chinese(text):
+                    return any('\u4e00' <= char <= '\u9fff' for char in text)
+                def only_legal_english_characters(text):
+                    return re.match(r'^[a-zA-Z0-9\-\.]*$', text)
+
+                # 获取当前blender文件名（不含扩展名）
+                blend_filepath = bpy.data.filepath
+                if blend_filepath:
+                    blend_filename = os.path.splitext(os.path.basename(blend_filepath))[0]
+                    if contains_chinese(blend_filename):
+                        gltf_filename = "scene.gltf"
+                    else:
+                        if only_legal_english_characters(blend_filename):
+                            safe_name = re.sub(r'[^\w\-\.]', '_', blend_filename)
+                        else:
+                            safe_name = "scene"
+                        gltf_filename = f"{safe_name}.gltf"
+                else:
+                    gltf_filename = "scene.gltf"
 
             self.gltf_path = os.path.join(self.output_base_dir, gltf_filename)
 
@@ -352,15 +380,19 @@ class BalsamGLTFToQMLConverter:
             #todo 可以手动设置场景名称，亦或者直接调用blender的导出设置
             
             # 默认GLTF导出设置
+            # https://docs.blender.org/api/current/bpy.ops.export_scene.html
             bpy.ops.export_scene.gltf(
                 filepath=self.gltf_path,
                 export_format='GLTF_EMBEDDED',  # 使用embedded模式
                 export_copyright='Blender2Quick3DMadeByZhiningJiao',
+                
                 export_texcoords=True,
                 export_normals=True,
                 export_tangents=True,
                 export_materials='EXPORT',
-                # Blender 4.4: export_colors 参数已移除/更名，删除以避免错误
+                # Blender 4.1/4.4: export_colors 和 export_visible_objects_only 参数已移除
+                # export_visible_objects_only=True,  # Blender 4.1 不支持此参数
+                use_visible=True,
                 export_attributes=True,
                 export_animations=True,
                 export_skins=True,
@@ -563,6 +595,10 @@ class BalsamGLTFToQMLConverter:
                 print("🎉 Balsam转换成功！")
                 print(f"✅ 使用的balsam版本: {os.path.basename(self.balsam_path)}")
                 print(f"✅ 完整路径: {self.balsam_path}")
+                
+                # 如果设置了 qmlproject，生成 qmldir 文件
+                self._generate_qmldir_if_needed()
+                
                 return True
             else:
                 print("❌ 所有参数格式都失败了")

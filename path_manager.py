@@ -17,6 +17,10 @@ class PathManager:
         self._qml_output_dir = None
         self._work_space_path = None
         self._addon_dir = None
+        self._qmlproject_path = None
+        self._qmlproject_assets_path = None
+        self._qmlproject_assets=[]
+
     
     @property
     def addon_dir(self) -> str:
@@ -90,14 +94,25 @@ class PathManager:
                 # 更新相关路径
                 self._output_base_dir = work_space_path
                 self._qml_output_dir = work_space_path
-                print(f"✅ 工作空间设置成功: {work_space_path}")
+                print(f" 工作空间设置成功: {work_space_path}")
                 return True
             else:
-                print(f"❌ 工作空间路径无效: {work_space_path}")
+                print(f" 工作空间路径无效: {work_space_path}")
                 return False
         except Exception as e:
-            print(f"❌ 设置工作空间失败: {e}")
+            print(f" 设置工作空间失败: {e}")
             return False
+
+    @property
+    def qmlproject_path(self) -> str:
+        """获取QML项目路径"""
+        return self._qmlproject_path
+    
+    @qmlproject_path.setter
+    def qmlproject_path(self, value: str):
+        """设置QML项目路径"""
+        self._qmlproject_path = value
+
     
     def get_gltf_path(self, filename: str = None) -> str:
         """获取GLTF文件路径"""
@@ -228,19 +243,27 @@ def get_qml_output_base_dir() -> str:
     return get_path_manager().qml_output_dir
 
 
+def get_qmlproject_path() -> str:
+    """获取QML项目路径"""
+    return get_path_manager().qmlproject_path
+
+def get_qmlproject_assets_path() -> str:
+    """获取QML项目资产路径"""
+    return get_path_manager().qmlproject_assets_path
+
 def print_path_status():
     """打印路径状态"""
     pm = get_path_manager()
     paths = pm.get_output_paths()
     
-    print("📊 路径管理器状态:")
-    print(f"  插件目录: {paths['addon_dir']}")
-    print(f"  工作空间: {paths['work_space'] or '(未设置)'}")
-    print(f"  输出基础目录: {paths['output_base_dir']}")
-    print(f"  QML输出目录: {paths['qml_output_dir']}")
-    print(f"  GLTF路径: {paths['gltf_path']}")
-    print(f"  基础目录存在: {'✅' if os.path.exists(paths['output_base_dir']) else '❌'}")
-    print(f"  QML目录存在: {'✅' if os.path.exists(paths['qml_output_dir']) else '❌'}")
+    print(" 路径管理器状态 Path Manager Status:")
+    print(f"  插件目录 Addon Directory: {paths['addon_dir']}")
+    print(f"  工作空间 Work Space: {paths['work_space'] or '(未设置)'}")
+    print(f"  输出基础目录 Output Base Directory: {paths['output_base_dir']}")
+    print(f"  QML输出目录 QML Output Directory: {paths['qml_output_dir']}")
+    print(f"  GLTF路径 GLTF Path: {paths['gltf_path']}")
+    print(f"  基础目录存在 Base Directory Exists: {'True' if os.path.exists(paths['output_base_dir']) else 'False'}")
+    print(f"  QML目录存在 QML Directory Exists: {'True' if os.path.exists(paths['qml_output_dir']) else 'False'}")
 
 
 # 全局变量 - balsam缓存管理

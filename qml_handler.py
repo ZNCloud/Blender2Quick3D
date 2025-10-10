@@ -13,7 +13,7 @@ import os
 import re
 from pathlib import Path
 
-# 尝试导入bpy，如果不在Blender环境中则跳过
+
 try:
     import bpy
     BLENDER_AVAILABLE = True
@@ -21,7 +21,7 @@ except ImportError:
     BLENDER_AVAILABLE = False
     print(" Blender环境不可用 使用默认设置")
 
-# 全局调试开关 - 可以通过环境变量控制
+
 import os
 DEFAULT_DEBUG_MODE = os.environ.get('BLENDER2QUICK3D_DEBUG', 'false').lower() == 'true'
 
@@ -383,66 +383,9 @@ class QMLHandler:
         return "Qt.rect(0, 0, 1, 1)"
     
     def fix_qml_compatibility_issues(self, qml_content):
-        # """修复QML兼容性问题"""
-        # try:
-        #     print("INFO: 开始修复QML兼容性问题...")
-            
-        #     # 修复常见的不兼容语法
-        #     fixes_applied = []
-            
-        #     # 1. 修复QQuick3DTexture引用
-        #     if "QQuick3DTexture*" in qml_content:
-        #         qml_content = qml_content.replace("QQuick3DTexture*", "Texture")
-        #         fixes_applied.append("修复QQuick3DTexture*引用")
-            
-        #     # 2. 修复不兼容的Texture语法
-        #     # 将 Texture { source: "..." } 替换为简单的字符串路径
-        #     import re
-            
-        #     # 匹配 Texture { source: "path" } 模式
-        #     texture_pattern = r'Texture\s*\{\s*source:\s*"([^"]+)"\s*\}'
-        #     matches = re.findall(texture_pattern, qml_content)
-        #     for match in matches:
-        #         old_text = f'Texture {{ source: "{match}" }}'
-        #         new_text = f'"{match}"'
-        #         qml_content = qml_content.replace(old_text, new_text)
-        #         fixes_applied.append(f"修复Texture对象: {match}")
-            
-        #     # 3. 修复其他可能的问题
-        #     # 只移除特定的不兼容属性模式，更加精确的匹配
-        #     problematic_patterns = [
-        #         # 匹配具体的属性定义模式 - 只移除明确的属性定义
-        #         (r'^\s*property\s+url\s+textureData\s*:.*$', "移除textureData属性定义"),
-        #         (r'^\s*property\s+url\s+textureCoordinate\s*:.*$', "移除textureCoordinate属性定义"),
-        #         (r'^\s*property\s+url\s+vertexData\s*:.*$', "移除vertexData属性定义"),
-        #         # 匹配具体的属性赋值模式 - 只移除明确的属性赋值
-        #         (r'^\s*textureData\s*:\s*"[^"]*"\s*$', "移除textureData属性赋值"),
-        #         (r'^\s*textureCoordinate\s*:\s*"[^"]*"\s*$', "移除textureCoordinate属性赋值"),
-        #         (r'^\s*vertexData\s*:\s*"[^"]*"\s*$', "移除vertexData属性赋值"),
-        #     ]
-            
-        #     for pattern, description in problematic_patterns:
-        #         matches = re.findall(pattern, qml_content, re.MULTILINE)
-        #         if matches:
-        #             qml_content = re.sub(pattern, '', qml_content, flags=re.MULTILINE)
-        #             fixes_applied.append(description)
-        #             print(f"INFO: {description} - 找到 {len(matches)} 个匹配")
-            
-        #     # 4. 清理多余的空行
-        #     qml_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', qml_content)
-            
-        #     if fixes_applied:
-        #         print(f"INFO: 应用了 {len(fixes_applied)} 个兼容性修复:")
-        #         for fix in fixes_applied:
-        #             print(f"  - {fix}")
-        #     else:
-        #         print("INFO: 没有发现需要修复的兼容性问题")
-            
-        #     return qml_content
-            
-        # except Exception as e:
-        #     print(f"ERROR: 修复QML兼容性问题失败: {e}")
-            return qml_content
+        """修复QML兼容性问题 - 暂时禁用"""
+        # 兼容性修复功能暂时禁用，直接返回原内容
+        return qml_content
     
     def get_antialiasing_mode_qml(self, mode):
         """获取抗锯齿模式的QML字符串"""

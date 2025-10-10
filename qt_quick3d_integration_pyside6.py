@@ -26,33 +26,20 @@ except ImportError as e:
 BALSAM_AVAILABLE = MODULES_AVAILABLE
 QML_HANDLER_AVAILABLE = MODULES_AVAILABLE
 
-# 检查系统PySide6可用性
-def check_system_pyside6():
-    """检查系统PySide6是否可用"""
-    try:
-        # 直接尝试导入系统PySide6
-        import PySide6
-        pyside6_path = os.path.dirname(PySide6.__file__)
-        print(f"✅ 找到系统PySide6: {pyside6_path}")
-        
-        # 检查是否在系统路径中
-        if "site-packages" in pyside6_path or "dist-packages" in pyside6_path:
-            print("✅ 确认使用系统安装的PySide6")
-            return True
-        else:
-            print("⚠️ PySide6路径可能不是系统安装")
-            return True  # 仍然尝试使用
-            
-    except ImportError as e:
-        print(f"❌ 系统没有PySide6: {e}")
-        return False
+# PySide6检查功能已移至path_manager模块
 
 # 尝试导入系统PySide6
 QT_AVAILABLE = False
 QUICK3D_AVAILABLE = False
 
-# 检查系统PySide6
-if check_system_pyside6():
+# 检查系统PySide6 - 使用path_manager
+try:
+    import PySide6
+    QT_AVAILABLE = True
+except ImportError:
+    QT_AVAILABLE = False
+
+if QT_AVAILABLE:
     try:
         # 尝试导入PySide6
         import PySide6
@@ -156,6 +143,11 @@ def show_quick3d_window():
                                 if work_space:
                                     qml_output_dir = work_space
                                     print(f"✅ 使用工作空间路径: {qml_output_dir}")
+                                    #如果qml_output_dir下有多个.qml则警告
+                                    qml_files = [f for f in os.listdir(qml_output_dir) if f.endswith('.qml')]
+                                    if len(qml_files) > 1:
+                                        print(f"警告: {qml_output_dir}下有多个.qml文件，可能会有冲突")
+                                        pring(f"Warning: {qml_output_dir} has multiple .qml files, may cause conflicts")
                             except:
                                 pass
                             

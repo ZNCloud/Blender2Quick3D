@@ -10,6 +10,7 @@ bl_info = {
     "category": "3D View",
 }
 
+from doctest import debug
 import bpy
 import os
 import sys
@@ -17,9 +18,10 @@ import subprocess
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy.types import Panel, Operator, AddonPreferences
 
-# 导入新的模块化组件
-from . import path_manager
-from . import scene_environment
+
+from . import path_manager #manage all paths
+from . import scene_environment #manage scene environment settings for Qt Quick3D
+from . import qmlproject_helper #manage qmlproject related logic
 
 # 检查 PySide6 是否可用
 def check_pyside6_availability():
@@ -33,193 +35,11 @@ def check_pyside6_availability():
         print(f"❌ 系统没有PySide6: {e}")
         return False, str(e)
 
-def find_all_pyside6_installations():
-    """查找所有可用的PySide6安装位置，按优先级排序"""
-    import site
-    import sys
-    
-    installations = []
-    
-    # 获取所有可能的site-packages路径
-    site_packages_paths = site.getsitepackages()
-    user_site = site.getusersitepackages()
-    
-    # 添加Blender特定的site-packages路径
-    blender_site_packages = []
-    if hasattr(sys, 'executable') and 'blender' in sys.executable.lower():
-        # Blender的site-packages通常在scripts/modules/下
-        blender_scripts = os.path.dirname(sys.executable)
-        blender_modules = os.path.join(blender_scripts, '..', 'scripts', 'modules')
-        blender_modules = os.path.abspath(blender_modules)
-        if os.path.exists(blender_modules):
-            blender_site_packages.append(blender_modules)
-    
-    # 检查每个可能的路径
-    all_paths = []
-    
-    # 1. 系统site-packages (最高优先级)
-    for site_path in site_packages_paths:
-        pyside6_path = os.path.join(site_path, 'PySide6')
-        if os.path.exists(pyside6_path):
-            all_paths.append({
-                'path': pyside6_path,
-                'type': 'system',
-                'priority': 1,
-                'description': f'System site-packages: {site_path}'
-            })
-    
-    # 2. 用户site-packages (中等优先级)
-    if user_site:
-        pyside6_path = os.path.join(user_site, 'PySide6')
-        if os.path.exists(pyside6_path):
-            all_paths.append({
-                'path': pyside6_path,
-                'type': 'user',
-                'priority': 2,
-                'description': f'User site-packages: {user_site}'
-            })
-    
-    # 3. Blender site-packages (最低优先级)
-    for blender_path in blender_site_packages:
-        pyside6_path = os.path.join(blender_path, 'PySide6')
-        if os.path.exists(pyside6_path):
-            all_paths.append({
-                'path': pyside6_path,
-                'type': 'blender',
-                'priority': 3,
-                'description': f'Blender site-packages: {blender_path}'
-            })
-    
-    # 按优先级排序
-    all_paths.sort(key=lambda x: x['priority'])
-    
-    # 验证每个安装并获取版本信息
-    for install in all_paths:
-        try:
-            # 临时添加到sys.path来导入
-            install_dir = os.path.dirname(install['path'])
-            if install_dir not in sys.path:
-                sys.path.insert(0, install_dir)
-            
-            # 尝试导入并获取版本
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("PySide6", os.path.join(install['path'], '__init__.py'))
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                version = getattr(module, '__version__', 'Unknown')
-                
-                install['version'] = version
-                install['valid'] = True
-                
-                print(f"✅ 找到PySide6安装: {install['description']}")
-                print(f"   版本: {version}")
-                print(f"   路径: {install['path']}")
-                
-            else:
-                install['version'] = 'Unknown'
-                install['valid'] = False
-                
-        except Exception as e:
-            install['version'] = 'Unknown'
-            install['valid'] = False
-            install['error'] = str(e)
-            print(f"⚠️ PySide6安装无效: {install['description']} - {e}")
-    
-    return all_paths
+# find_all_pyside6_installations 函数已移至 path_manager.py
 
-def get_pyside6_installation_info():
-    """获取PySide6的详细安装信息，支持多个安装位置"""
-    try:
-        # 首先尝试直接导入（当前使用的版本）
-        import PySide6
-        current_path = os.path.dirname(PySide6.__file__)
-        current_version = getattr(PySide6, '__version__', 'Unknown')
-        
-        # 查找所有可用的安装
-        all_installations = path_manager.find_all_pyside6_installations()
-        
-        # 确定当前使用的安装
-        current_install = None
-        for install in all_installations:
-            try:
-                # 尝试使用samefile，如果失败则比较标准化路径
-                if os.path.samefile(install['path'], current_path):
-                    current_install = install
-                    break
-            except (OSError, FileNotFoundError):
-                # 如果samefile失败，比较标准化路径
-                if os.path.normpath(install['path']) == os.path.normpath(current_path):
-                    current_install = install
-                    break
-        
-        # 如果没有找到匹配的安装，创建一个临时的
-        if not current_install:
-            current_install = {
-                'path': current_path,
-                'type': 'unknown',
-                'priority': 0,
-                'description': 'Current import path',
-                'version': current_version,
-                'valid': True
-            }
-        
-        # 按优先级排序所有安装
-        valid_installations = [inst for inst in all_installations if inst.get('valid', False)]
-        valid_installations.sort(key=lambda x: x['priority'])
-        
-        info = {
-            'available': True,
-            'current': current_install,
-            'all_installations': valid_installations,
-            'best_installation': valid_installations[0] if valid_installations else current_install,
-            'error': None
-        }
-        
-        print(f"PySide6 Info:")
-        print(f"  当前使用: {current_install['description']}")
-        print(f"  版本: {current_install['version']}")
-        print(f"  路径: {current_install['path']}")
-        if valid_installations:
-            print(f"  推荐使用: {valid_installations[0]['description']}")
-        
-        return info
-        
-    except ImportError as e:
-        error_msg = str(e)
-        print(f"PySide6 not available: {error_msg}")
-        return {
-            'available': False,
-            'current': None,
-            'all_installations': [],
-            'best_installation': None,
-            'error': error_msg
-        }
+# get_pyside6_installation_info 函数已移至 path_manager.py
 
-def get_python_executable_info():
-    """获取Python可执行文件和路径信息"""
-    import sys
-    import site
-    
-    info = {
-        'executable': sys.executable,
-        'version': sys.version,
-        'site_packages': site.getsitepackages(),
-        'user_site': site.getusersitepackages(),
-        'prefix': sys.prefix,
-        'base_prefix': getattr(sys, 'base_prefix', sys.prefix),
-        'is_virtual_env': hasattr(sys, 'real_prefix') or 
-                         (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
-    }
-    
-    print(f"Python Info:")
-    print(f"  Executable: {info['executable']}")
-    print(f"  Version: {info['version']}")
-    print(f"  Site packages: {info['site_packages']}")
-    print(f"  User site: {info['user_site']}")
-    print(f"  Prefix: {info['prefix']}")
-    
-    return info
+# get_python_executable_info 函数已移至 path_manager.py
 
 # 检查系统是否有PySide6
 PYSDIE6_AVAILABLE, PYSDIE6_ERROR = check_pyside6_availability()
@@ -236,22 +56,16 @@ SELECTED_BALSAM_PATH = None
 try:
     if PYSDIE6_AVAILABLE:
         from . import qt_quick3d_integration_pyside6 as qt_quick3d_integration
-        from . import render_engine
         MODULES_AVAILABLE = True
     else:
         MODULES_AVAILABLE = False
         qt_quick3d_integration = None
-        render_engine = None
 except ImportError as e:
     print(f"Warning: Some Qt6.9 Quick3D modules not found: {e}")
     MODULES_AVAILABLE = False
     qt_quick3d_integration = None
-    render_engine = None
 
 # Balsam路径管理 - 使用path_manager模块
-# 这些变量将在需要时从path_manager获取
-
-# _scan_qt_balsam_paths函数已移至path_manager.py模块
 
 def _label_for_balsam_path(path_str: str) -> str:
     """生成友好标签，例如 6.5.3-mingw_64 或 6.5.3-msvc2019_64"""
@@ -280,13 +94,43 @@ def _label_for_balsam_path(path_str: str) -> str:
     except Exception:
         return os.path.basename(path_str)
 
-# _load_balsam_cache函数已移至path_manager.py模块
 
-# _save_balsam_cache函数已移至path_manager.py模块
-
-# _update_balsam_selection函数已移至path_manager.py模块
-
-# _build_balsam_enum_items函数已移至path_manager.py模块
+# 回调函数：资源文件夹变化时自动设置工作空间
+def update_qmlproject_assets_folder(self, context):
+    """当资源文件夹选择改变时，自动设置工作空间"""
+    try:
+        from . import qmlproject_helper, path_manager
+        
+        scene = context.scene
+        asset_folder = scene.qmlproject_assets_folder
+        
+        # 跳过特殊值
+        if asset_folder in ["NONE", "EMPTY", "ERROR"]:
+            return
+        
+        # 获取 helper 实例
+        helper = qmlproject_helper.get_qmlproject_helper()
+        
+        if not helper.qtquick3d_assets_dir:
+            print("⚠️ QMLProject 未初始化，无法自动设置工作空间")
+            return
+        
+        # 构建完整路径
+        asset_path = os.path.join(helper.qtquick3d_assets_dir, asset_folder)
+        
+        if not os.path.exists(asset_path):
+            os.makedirs(asset_path, exist_ok=True)
+            print(f"📁 自动创建资源文件夹: {asset_path}")
+        
+        # 设置工作空间
+        pm = path_manager.get_path_manager()
+        pm.set_work_space(asset_path)
+        scene.work_space_path = asset_path
+        
+        print(f"✅ 工作空间已自动设置为: {asset_path}")
+            
+    except Exception as e:
+        print(f"❌ 自动设置工作空间失败: {e}")
 
 # 注册场景属性
 def register_scene_properties():
@@ -320,6 +164,22 @@ def register_scene_properties():
         items=path_manager.build_balsam_enum_items,
         default=0,
         update=path_manager.update_balsam_selection,
+    )
+    
+    # QMLProject 相关属性
+    bpy.types.Scene.qmlproject_path = StringProperty(
+        name="QMLProject Path",
+        description="Path to .qmlproject file",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    bpy.types.Scene.qmlproject_assets_folder = EnumProperty(
+        name="Asset Folder",
+        description="Select an asset folder from Generated/QtQuick3D (auto-updates workspace)",
+        items=qmlproject_helper.build_assets_folder_enum_items,
+        default=0,
+        update=update_qmlproject_assets_folder,  # 自动设置工作空间
     )
     
     # 注册SceneEnvironment属性
@@ -682,20 +542,56 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         layout.label(text="Work Space Settings:")
 
         row = layout.row()
+        #当设置了qmlproject路径时，按钮"Set Work Space"被disabled
+        # if getattr(scene, "path_manager._qmlproject_path", None):
+        #     row.enabled = False
+        # else:
+        #     row.enabled = True
         row.operator("qt_quick3d.balsam_set_work_space", text="Set Work Space")
+        # row.operator("",text="Set QMLProject Path")
+        # layout.separator()
+        
+        
 
-        # 显示和编辑当前工作空间路径
+        # row.operator("qt_quick3d.balsam_set_work_space", text="Set Work Space")
+
+        # 显示当前路径信息
         scene = context.scene
-
-        # Work Space Path 输入栏
-        #layout.prop(scene, "work_space_path", text="Work Space")
-
-        # 兼容性提示（如果属性未设置，显示默认信息）
-        work_space = getattr(scene, "work_space_path", None)
-        if not work_space:
-            layout.label(text="Work Space: (default)")
+        
+        # 创建信息框显示路径关系
+        info_box = layout.box()
+        info_box.label(text="Path Information:", icon='INFO')
+        
+        # Work Space 路径 - 从 path_manager 获取实际的 workspace
+        from . import path_manager
+        pm = path_manager.get_path_manager()
+        work_space = pm.work_space_path or pm.output_base_dir
+        
+        if work_space:
+            # 显示完整路径
+            info_box.label(text=f"Workspace: ...{work_space[-40:]}" if len(work_space) > 40 else f"Workspace: {work_space}", icon='FOLDER_REDIRECT')
         else:
-            layout.label(text=f"Work Space: {work_space}")
+            info_box.label(text="Workspace: (Not set - using default)", icon='ERROR')
+        
+        # QMLProject 路径（如果设置了）
+        qmlproject_path = getattr(scene, "qmlproject_path", None)
+        if qmlproject_path:
+            qmlproject_name = os.path.basename(qmlproject_path)
+            info_box.label(text=f"QMLProject: {qmlproject_name}", icon='FILE')
+            
+            # 显示资源文件夹（如果选择了）
+            asset_folder = getattr(scene, "qmlproject_assets_folder", "NONE")
+            if asset_folder and asset_folder not in ["NONE", "EMPTY", "ERROR"]:
+                info_box.label(text=f"Asset Folder: {asset_folder}", icon='ASSET_MANAGER')
+                
+                # 显示路径关系说明
+                from . import qmlproject_helper
+                helper = qmlproject_helper.get_qmlproject_helper()
+                if helper.qtquick3d_assets_dir:
+                    # 简化显示：QMLProject目录/Generated/QtQuick3D/AssetFolder
+                    qml_dir = os.path.dirname(qmlproject_path)
+                    relative_path = f"{os.path.basename(qml_dir)}/Generated/QtQuick3D/{asset_folder}"
+                    info_box.label(text=f"  → {relative_path}", icon='FORWARD')
 
         # 提供调用balsam转换和写入的按钮
         layout.separator()
@@ -909,26 +805,51 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
 
         if getattr(scene, "show_debug_options", False):
             # QML调试模式切换
-            debug_box.label(text="QML Debug:")
+         #   debug_box.label(text="QML Debug:")
             row = debug_box.row()
             row.operator("qt_quick3d.toggle_debug_mode", text="Toggle QML Debug Mode")
             
             # IBL测试
-            debug_box.label(text="IBL Testing:")
+          #  debug_box.label(text="IBL Testing:")
             row = debug_box.row()
-            row.operator("qt_quick3d.test_ibl_copy", text="Test IBL Copy", icon='IMAGE_DATA')
+            row.operator("qt_quick3d.test_ibl_copy", text="Test IBL Copy")
             
             # 其他调试功能可以在这里添加
-            debug_box.label(text="Other Debug Tools:")
-            # 未来可以添加更多调试工具
-            # row = debug_box.row()
-            # row.operator("qt_quick3d.debug_tool_name", text="Debug Tool Name")
+          #  debug_box.label(text="Other Debug Tools:")
+            row = debug_box.row()
+            #Save .gltf and .blend into base_dir/source scene
+            row.operator("qt_quick3d.save_source_scene",text="Save source scene")
+            row = debug_box.row()
+            row.operator("qt_quick3d.open_workspace_folder",text="Open workspace folder")
+            
+            # QMLProject 设置
+            debug_box.separator()
+            debug_box.label(text="QMLProject Settings:")
+            
+            row = debug_box.row()
+            row.operator("qt_quick3d.set_qmlproject_path", text="Set QMLProject Path")
+            
+            # 显示当前 QMLProject 路径
+            qmlproject_path = getattr(scene, "qmlproject_path", None)
+            if qmlproject_path:
+                box = debug_box.box()
+                box.label(text=f"QMLProject: {os.path.basename(qmlproject_path)}", icon='FILE')
+                
+                # 资源文件夹选择下拉框（选择后自动设置工作空间）
+                row = debug_box.row()
+                row.prop(scene, "qmlproject_assets_folder", text="Asset Folder")
+                
+                # 手动设置工作空间按钮（可选，下拉框已自动设置）
+                row = debug_box.row()
+                asset_folder = scene.qmlproject_assets_folder
+                row.enabled = asset_folder not in ["NONE", "EMPTY", "ERROR"]
+                row.operator("qt_quick3d.set_workspace_from_asset", text="Refresh Workspace", icon='FILE_REFRESH')
 
         # 显示一些状态信息
-        layout.separator()
-        layout.label(text="Status: Ready")
-        layout.label(text="Qt Version: 6.9")
-        layout.label(text="Quick3D: Available") #TODO尚需检测环境
+        # layout.separator()
+        # layout.label(text="Status: Ready")
+        # layout.label(text="Qt Version: 6.9")
+        # layout.label(text="Quick3D: Available") #TODO尚需检测环境
         
         # 显示场景信息
         # 注意：qt_quick3d_engine 已被移除，场景信息功能已集成到 qt_quick3d_integration_pyside6 中
@@ -1252,6 +1173,181 @@ class QT_QUICK3D_OT_balsam_cleanup(Operator):
                 
         except Exception as e:
             self.report({'ERROR'}, f"Cleanup failed: {str(e)}")
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_save_source_scene(Operator):
+    """Save source scene (.gltf and .blend) to workspace/source_scene folder"""
+    bl_idname = "qt_quick3d.save_source_scene"
+    bl_label = "Save Source Scene"
+    bl_description = "Save .gltf and .blend files to workspace/source_scene folder"
+    
+    def execute(self, context):
+        try:
+            from . import path_manager, balsam_gltf_converter
+            import os
+            import bpy
+            
+            pm = path_manager.get_path_manager()
+            workspace_dir = pm.output_base_dir
+            
+            # 创建source_scene文件夹
+            source_scene_dir = os.path.join(workspace_dir, "source scene")
+            os.makedirs(source_scene_dir, exist_ok=True)
+            print(f"📁 Source scene directory: {source_scene_dir}")
+            
+            # 保存.blend文件
+            blend_filepath = bpy.data.filepath
+            if blend_filepath:
+                blend_filename = os.path.basename(blend_filepath)
+            else:
+                blend_filename = "scene.blend"
+            
+            blend_save_path = os.path.join(source_scene_dir, blend_filename)
+            bpy.ops.wm.save_as_mainfile(filepath=blend_save_path, copy=True)
+            print(f"✅ Blend file saved: {blend_save_path}")
+            
+            # 导出.gltf文件到source_scene文件夹
+            converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
+            # 临时修改输出目录为source_scene
+            original_output_dir = converter.output_base_dir
+            converter.output_base_dir = source_scene_dir
+            
+            if converter.export_scene_to_gltf():
+                print(f"✅ GLTF file saved: {converter.gltf_path}")
+                self.report({'INFO'}, f"Source scene saved to: {source_scene_dir}")
+            else:
+                self.report({'ERROR'}, "Failed to export GLTF")
+                
+            # 恢复原始输出目录
+            converter.output_base_dir = original_output_dir
+                
+        except Exception as e:
+            print(f"❌ Save source scene failed: {e}")
+            self.report({'ERROR'}, f"Failed to save source scene: {str(e)}")
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_open_workspace_folder(Operator):
+    """Open workspace folder in file explorer"""
+    bl_idname = "qt_quick3d.open_workspace_folder"
+    bl_label = "Open Workspace Folder"
+    bl_description = "Open the workspace/output folder in file explorer"
+    
+    def execute(self, context):
+        try:
+            from . import path_manager
+            pm = path_manager.get_path_manager()
+            
+            if pm.open_output_folder():
+                self.report({'INFO'}, "Workspace folder opened")
+            else:
+                self.report({'ERROR'}, "Could not open workspace folder")
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to open folder: {str(e)}")
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_set_qmlproject_path(Operator):
+    """Set QMLProject file path"""
+    bl_idname = "qt_quick3d.set_qmlproject_path"
+    bl_label = "Set QMLProject Path"
+    bl_description = "Set the path to .qmlproject file and initialize folder structure"
+    
+    filepath: StringProperty(
+        name="QMLProject File",
+        description="Path to .qmlproject file",
+        default="",
+        subtype='FILE_PATH'
+    )
+    
+    filter_glob: StringProperty(
+        default="*.qmlproject",
+        options={'HIDDEN'}
+    )
+    
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+    
+    def execute(self, context):
+        try:
+            from . import qmlproject_helper
+            
+            if not self.filepath:
+                self.report({'ERROR'}, "No file selected")
+                return {'CANCELLED'}
+            
+            if not os.path.exists(self.filepath):
+                self.report({'ERROR'}, f"File does not exist: {self.filepath}")
+                return {'CANCELLED'}
+            
+            # 清除缓存，确保重新扫描
+            qmlproject_helper.clear_assets_cache()
+            
+            # 获取 helper 实例并设置路径
+            helper = qmlproject_helper.get_qmlproject_helper()
+            if helper.setup(self.filepath):
+                # 保存到场景属性
+                context.scene.qmlproject_path = self.filepath
+                self.report({'INFO'}, f"QMLProject path set: {self.filepath}")
+                print(f"✅ QMLProject设置成功: {self.filepath}")
+                print(f"📦 找到 {len(helper.assets_folders)} 个资源文件夹")
+            else:
+                self.report({'ERROR'}, "Failed to initialize QMLProject")
+                return {'CANCELLED'}
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to set QMLProject path: {str(e)}")
+            print(f"❌ 设置QMLProject路径失败: {e}")
+            return {'CANCELLED'}
+        
+        return {'FINISHED'}
+
+class QT_QUICK3D_OT_set_workspace_from_asset(Operator):
+    """Set workspace to selected asset folder"""
+    bl_idname = "qt_quick3d.set_workspace_from_asset"
+    bl_label = "Set Workspace to Asset Folder"
+    bl_description = "Set the workspace path to the selected asset folder"
+    
+    def execute(self, context):
+        try:
+            from . import qmlproject_helper, path_manager
+            
+            scene = context.scene
+            asset_folder = scene.qmlproject_assets_folder
+            
+            if asset_folder in ["NONE", "EMPTY", "ERROR"]:
+                self.report({'WARNING'}, "Please select a valid asset folder")
+                return {'CANCELLED'}
+            
+            # 获取 helper 实例
+            helper = qmlproject_helper.get_qmlproject_helper()
+            
+            if not helper.qtquick3d_assets_dir:
+                self.report({'ERROR'}, "QMLProject not initialized. Please set QMLProject path first")
+                return {'CANCELLED'}
+            
+            # 构建完整路径
+            asset_path = os.path.join(helper.qtquick3d_assets_dir, asset_folder)
+            
+            if not os.path.exists(asset_path):
+                os.makedirs(asset_path, exist_ok=True)
+                print(f"📁 创建资源文件夹: {asset_path}")
+            
+            # 设置工作空间
+            pm = path_manager.get_path_manager()
+            pm.set_work_space(asset_path)
+            scene.work_space_path = asset_path
+            
+            self.report({'INFO'}, f"Workspace set to: {asset_folder}")
+            print(f"✅ 工作空间设置为: {asset_path}")
+                
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to set workspace: {str(e)}")
+            print(f"❌ 设置工作空间失败: {e}")
+            return {'CANCELLED'}
         
         return {'FINISHED'}
 
@@ -1588,6 +1684,10 @@ classes = [
     QT_QUICK3D_OT_balsam_open_gltf,
     QT_QUICK3D_OT_balsam_open_qml,
     QT_QUICK3D_OT_balsam_cleanup,
+    QT_QUICK3D_OT_save_source_scene,
+    QT_QUICK3D_OT_open_workspace_folder,
+    QT_QUICK3D_OT_set_qmlproject_path,
+    QT_QUICK3D_OT_set_workspace_from_asset,
     QT_QUICK3D_OT_search_local_balsam,
 ]
 
@@ -1625,29 +1725,11 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     
-    # 注册渲染引擎 - 暂时注释掉，以后再实现
-    # if MODULES_AVAILABLE:
-    #     render_engine.register()
-    #     print("✓ Qt Quick3D plugin registered successfully")
-    #     
-    #     # 自动设置Quick3D渲染引擎
-    #     try:
-    #         # 延迟执行，确保Blender完全初始化
-    #         bpy.app.timers.register(auto_set_render_engine, first_interval=0.1)
-    #         print("✓ Auto-set render engine timer scheduled")
-    #     except Exception as e:
-    #         print(f"⚠️  Failed to schedule auto-set render engine: {e}")
-    # else:
-    #     print("✗ Qt Quick3D plugin registration incomplete")
-    #     if not PYSDIE6_AVAILABLE:
-    #         print("  - PySide6 not available")
-    
+    # 渲染引擎功能暂时禁用
     print("✓ Qt Quick3D plugin registered successfully (render engine disabled)")
 
 def unregister():
-    # 注销渲染引擎 - 暂时注释掉，以后再实现
-    # if MODULES_AVAILABLE:
-    #     render_engine.unregister()
+    # 渲染引擎功能已禁用
     
     # 注销主插件类
     for cls in reversed(classes):
@@ -1656,44 +1738,11 @@ def unregister():
     # 注销场景属性
     scene_environment.unregister_scene_environment_properties()
     
-    # 清理场景加载处理器 - 暂时注释掉，以后再实现
-    # try:
-    #     if set_render_engine_on_load in bpy.app.handlers.load_post:
-    #         bpy.app.handlers.load_post.remove(set_render_engine_on_load)
-    #         print("✓ 清理场景加载后处理器")
-    # except Exception as e:
-    #     print(f"⚠️  清理场景加载后处理器失败: {e}")
+    # 渲染引擎相关处理器已禁用
     
     print("Qt Quick3D plugin unregistered")
 
-# 自动设置渲染引擎相关函数 - 暂时注释掉，以后再实现
-# def auto_set_render_engine():
-#     """自动设置Quick3D渲染引擎"""
-#     try:
-#         # 获取所有场景
-#         for scene in bpy.data.scenes:
-#             if scene.render.engine != 'QUICK3D':
-#                 scene.render.engine = 'QUICK3D'
-#                 print(f"✓ 自动设置场景 '{scene.name}' 的渲染引擎为 Quick3D")
-#         
-#         # 设置新创建的场景也使用Quick3D引擎
-#         bpy.app.handlers.load_post.append(set_render_engine_on_load)
-#         print("✓ 添加场景加载后处理器")
-#         
-#         return None  # 停止定时器
-#         
-#     except Exception as e:
-#         print(f"⚠️  自动设置渲染引擎失败: {e}")
-#         return None  # 停止定时器
-
-# def set_render_engine_on_load(scene):
-#     """在场景加载后设置渲染引擎"""
-#     try:
-#         if scene.render.engine != 'QUICK3D':
-#             scene.render.engine = 'QUICK3D'
-#             print(f"✓ 场景加载后自动设置渲染引擎为 Quick3D")
-#     except Exception as e:
-#         print(f"⚠️  场景加载后设置渲染引擎失败: {e}")
+# 渲染引擎相关函数已禁用
 
 if __name__ == "__main__":
     register()
