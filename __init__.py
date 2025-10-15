@@ -540,15 +540,14 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         # 设置工作空间路径
         layout.separator()
         layout.label(text="Work Space Settings:")
-
+        
         row = layout.row()
-        #当设置了qmlproject路径时，按钮"Set Work Space"被disabled
-        # if getattr(scene, "path_manager._qmlproject_path", None):
-        #     row.enabled = False
-        # else:
-        #     row.enabled = True
         row.operator("qt_quick3d.balsam_set_work_space", text="Set Work Space")
-        # row.operator("",text="Set QMLProject Path")
+        
+        # 显示提示信息
+        box = layout.box()
+        box.scale_y = 0.7
+        box.label(text="💡 Tip: Auto-detects .qmlproject files", icon='INFO')
         # layout.separator()
         
         
@@ -822,16 +821,12 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
             row = debug_box.row()
             row.operator("qt_quick3d.open_workspace_folder",text="Open workspace folder")
             
-            # QMLProject 设置
-            debug_box.separator()
-            debug_box.label(text="QMLProject Settings:")
-            
-            row = debug_box.row()
-            row.operator("qt_quick3d.set_qmlproject_path", text="Set QMLProject Path")
-            
-            # 显示当前 QMLProject 路径
+            # QMLProject 信息显示（如果检测到）
             qmlproject_path = getattr(scene, "qmlproject_path", None)
             if qmlproject_path:
+                debug_box.separator()
+                debug_box.label(text="QMLProject Info:")
+                
                 box = debug_box.box()
                 box.label(text=f"QMLProject: {os.path.basename(qmlproject_path)}", icon='FILE')
                 
@@ -1249,61 +1244,18 @@ class QT_QUICK3D_OT_open_workspace_folder(Operator):
         
         return {'FINISHED'}
 
+# QT_QUICK3D_OT_set_qmlproject_path 已合并到 QT_QUICK3D_OT_balsam_set_work_space
+# 保留定义以防止旧代码引用错误
 class QT_QUICK3D_OT_set_qmlproject_path(Operator):
-    """Set QMLProject file path"""
+    """Deprecated: Use 'Set Work Space' instead (auto-detects .qmlproject files)"""
     bl_idname = "qt_quick3d.set_qmlproject_path"
-    bl_label = "Set QMLProject Path"
-    bl_description = "Set the path to .qmlproject file and initialize folder structure"
-    
-    filepath: StringProperty(
-        name="QMLProject File",
-        description="Path to .qmlproject file",
-        default="",
-        subtype='FILE_PATH'
-    )
-    
-    filter_glob: StringProperty(
-        default="*.qmlproject",
-        options={'HIDDEN'}
-    )
-    
-    def invoke(self, context, event):
-        context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+    bl_label = "Set QMLProject Path (Deprecated)"
+    bl_description = "Deprecated: Use 'Set Work Space' instead. It auto-detects .qmlproject files"
     
     def execute(self, context):
-        try:
-            from . import qmlproject_helper
-            
-            if not self.filepath:
-                self.report({'ERROR'}, "No file selected")
-                return {'CANCELLED'}
-            
-            if not os.path.exists(self.filepath):
-                self.report({'ERROR'}, f"File does not exist: {self.filepath}")
-                return {'CANCELLED'}
-            
-            # 清除缓存，确保重新扫描
-            qmlproject_helper.clear_assets_cache()
-            
-            # 获取 helper 实例并设置路径
-            helper = qmlproject_helper.get_qmlproject_helper()
-            if helper.setup(self.filepath):
-                # 保存到场景属性
-                context.scene.qmlproject_path = self.filepath
-                self.report({'INFO'}, f"QMLProject path set: {self.filepath}")
-                print(f"✅ QMLProject设置成功: {self.filepath}")
-                print(f"📦 找到 {len(helper.assets_folders)} 个资源文件夹")
-            else:
-                self.report({'ERROR'}, "Failed to initialize QMLProject")
-                return {'CANCELLED'}
-                
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to set QMLProject path: {str(e)}")
-            print(f"❌ 设置QMLProject路径失败: {e}")
-            return {'CANCELLED'}
-        
-        return {'FINISHED'}
+        self.report({'WARNING'}, "This function is deprecated. Please use 'Set Work Space' button instead.")
+        print("⚠️ QT_QUICK3D_OT_set_qmlproject_path 已弃用，请使用 'Set Work Space' 按钮")
+        return {'CANCELLED'}
 
 class QT_QUICK3D_OT_set_workspace_from_asset(Operator):
     """Set workspace to selected asset folder"""
@@ -1352,10 +1304,10 @@ class QT_QUICK3D_OT_set_workspace_from_asset(Operator):
         return {'FINISHED'}
 
 class QT_QUICK3D_OT_balsam_set_work_space(Operator):
-    """Set work space directory for GLTF and QML files"""
+    """Set work space directory (auto-detects QMLProject files)"""
     bl_idname = "qt_quick3d.balsam_set_work_space"
     bl_label = "Set Work Space"
-    bl_description = "Set working directory for GLTF and QML files"
+    bl_description = "Set working directory for GLTF and QML files. Auto-detects .qmlproject files in the directory"
     
     directory: StringProperty(
         name="Work Space Directory",
@@ -1370,21 +1322,70 @@ class QT_QUICK3D_OT_balsam_set_work_space(Operator):
     
     def execute(self, context):
         try:
-            from . import balsam_gltf_converter
-            converter = balsam_gltf_converter.BalsamGLTFToQMLConverter()
+            from . import qmlproject_helper, path_manager
             
-            # 设置工作空间路径
-            if converter.set_custom_output_dir(self.directory):
-                self.report({'INFO'}, f"Work space set to: {self.directory}")
-                # 保存到场景属性中
-                context.scene.work_space_path = self.directory
-                # 同时更新旧的属性以保持兼容性
-                context.scene.balsam_output_dir = self.directory
+            if not self.directory:
+                self.report({'ERROR'}, "No directory selected")
+                return {'CANCELLED'}
+            
+            if not os.path.exists(self.directory):
+                self.report({'ERROR'}, f"Directory does not exist: {self.directory}")
+                return {'CANCELLED'}
+            
+            # 检查目录中是否有 .qmlproject 文件
+            qmlproject_files = [f for f in os.listdir(self.directory) if f.endswith('.qmlproject')]
+            
+            if qmlproject_files:
+                # 找到 .qmlproject 文件，使用 QMLProject 模式
+                qmlproject_path = os.path.join(self.directory, qmlproject_files[0])
+                print(f"🔍 检测到 QMLProject 文件: {qmlproject_path}")
+                
+                # 清除缓存
+                qmlproject_helper.clear_assets_cache()
+                
+                # 获取 helper 实例并设置路径
+                helper = qmlproject_helper.get_qmlproject_helper()
+                if helper.setup(qmlproject_path):
+                    # 保存到场景属性
+                    context.scene.qmlproject_path = qmlproject_path
+                    
+                    # 设置工作空间为 qmlproject_assets_path
+                    pm = path_manager.get_path_manager()
+                    if helper.qmlproject_assets_path:
+                        pm.set_work_space(helper.qmlproject_assets_path)
+                        context.scene.work_space_path = helper.qmlproject_assets_path
+                        
+                        self.report({'INFO'}, f"QMLProject detected! Workspace set to: {os.path.basename(helper.qmlproject_assets_path)}")
+                        print(f"✅ QMLProject模式: 工作空间 = {helper.qmlproject_assets_path}")
+                        print(f"📦 找到 {len(helper.assets_folders)} 个资源文件夹")
+                    else:
+                        self.report({'WARNING'}, "QMLProject initialized but assets path not set")
+                else:
+                    self.report({'ERROR'}, "Failed to initialize QMLProject")
+                    return {'CANCELLED'}
             else:
-                self.report({'ERROR'}, "Failed to set work space")
+                # 没有 .qmlproject 文件，使用普通工作空间模式
+                print(f"📁 未检测到 QMLProject 文件，使用普通工作空间模式")
+                
+                # 清除 QMLProject 相关设置
+                context.scene.qmlproject_path = ""
+                helper = qmlproject_helper.get_qmlproject_helper()
+                helper.clear()  # 清除 helper 中的所有 QMLProject 设置
+                
+                # 设置工作空间
+                pm = path_manager.get_path_manager()
+                pm.set_work_space(self.directory)
+                context.scene.work_space_path = self.directory
+                
+                self.report({'INFO'}, f"Work space set to: {self.directory}")
+                print(f"✅ 普通模式: 工作空间 = {self.directory}")
                 
         except Exception as e:
             self.report({'ERROR'}, f"Failed to set work space: {str(e)}")
+            print(f"❌ 设置工作空间失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'CANCELLED'}
         
         return {'FINISHED'}
 
@@ -1677,7 +1678,7 @@ classes = [
     QT_QUICK3D_OT_balsam_convert_scene,
     QT_QUICK3D_OT_test_ibl_copy,
     QT_QUICK3D_OT_balsam_convert_existing,
-    QT_QUICK3D_OT_balsam_set_work_space,
+    QT_QUICK3D_OT_balsam_set_work_space,  # 合并后的按钮，自动检测 .qmlproject
     QT_QUICK3D_OT_balsam_set_gltf_path,
     QT_QUICK3D_OT_balsam_set_output_dir,
     QT_QUICK3D_OT_balsam_open_output,
@@ -1686,7 +1687,7 @@ classes = [
     QT_QUICK3D_OT_balsam_cleanup,
     QT_QUICK3D_OT_save_source_scene,
     QT_QUICK3D_OT_open_workspace_folder,
-    QT_QUICK3D_OT_set_qmlproject_path,
+    QT_QUICK3D_OT_set_qmlproject_path,  # 保留以防止旧代码引用错误（已弃用）
     QT_QUICK3D_OT_set_workspace_from_asset,
     QT_QUICK3D_OT_search_local_balsam,
 ]

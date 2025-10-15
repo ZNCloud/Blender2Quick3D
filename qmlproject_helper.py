@@ -207,6 +207,15 @@ class QMLProjectHelper:
         """刷新资源列表"""
         self.assets_folders = self._find_assets_folders()
         return self.assets_folders
+    
+    def clear(self):
+        """清除所有 QMLProject 相关设置"""
+        self.qmlproject_path = None
+        self.qtquick3d_assets_dir = None
+        self.qmlproject_assets_path = None
+        self.assets_folders = []
+        self.blender_file_name = None
+        print("🧹 已清除 QMLProject 相关设置")
 
 
 # =============================================================================

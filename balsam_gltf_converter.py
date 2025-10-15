@@ -61,9 +61,19 @@ class BalsamGLTFToQMLConverter:
         
     def setup_environment(self):
         """设置环境"""
-        # 使用全局变量确保路径一致
-        self.output_base_dir = get_output_base_dir()
-        self.qml_output_dir = path_manager.get_qml_output_base_dir()
+        # 优先从 path_manager 获取统一的 workspace 路径
+        pm = path_manager.get_path_manager()
+        
+        # 使用 work_space_path 或回退到默认的 output_base_dir
+        if pm.work_space_path:
+            self.output_base_dir = pm.work_space_path
+            self.qml_output_dir = pm.work_space_path
+            print(f"✅ 使用统一的工作空间路径: {self.output_base_dir}")
+        else:
+            # 使用全局变量确保路径一致
+            self.output_base_dir = get_output_base_dir()
+            self.qml_output_dir = path_manager.get_qml_output_base_dir()
+            print(f"ℹ️ 使用默认输出路径: {self.output_base_dir}")
 
         # 设置当前Qt可读的资源目录
         # 这里可以设置Qt相关的环境变量，确保QML引擎能找到输出目录
@@ -393,8 +403,9 @@ class BalsamGLTFToQMLConverter:
                 # Blender 4.1/4.4: export_colors 和 export_visible_objects_only 参数已移除
                 # export_visible_objects_only=True,  # Blender 4.1 不支持此参数
                 use_visible=True,
-                export_attributes=True,
                 export_animations=True,
+                export_attributes=True,
+
                 export_skins=True,
                 export_all_influences=False,
                 export_morph=True,
