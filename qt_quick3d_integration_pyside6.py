@@ -131,29 +131,37 @@ def show_quick3d_window():
                     # 创建QML引擎
                     self.qml_engine = QQmlApplicationEngine()
                     
-                                     # 添加QML导入路径，优先使用工作空间路径
+                                     # 添加QML导入路径，统一从 path_manager 获取工作空间路径
                     if BALSAM_AVAILABLE:
                         try:
-                            # 优先使用工作空间路径
-                            qml_output_dir = None
+                            # 统一从 path_manager 获取工作空间路径
+                            pm = path_manager.get_path_manager()
+                            
+                            # 确保 path_manager 已同步场景属性中的工作空间路径
                             try:
                                 import bpy
                                 scene = bpy.context.scene
-                                work_space = getattr(scene, 'work_space_path', None)
-                                if work_space:
-                                    qml_output_dir = work_space
-                                    print(f"✅ 使用工作空间路径: {qml_output_dir}")
-                                    #如果qml_output_dir下有多个.qml则警告
+                                scene_work_space = getattr(scene, 'work_space_path', None)
+                                if scene_work_space and scene_work_space != pm.work_space_path:
+                                    # 同步场景属性到 path_manager
+                                    pm.set_work_space(scene_work_space)
+                                    print(f"🔄 已同步工作空间路径到 path_manager: {scene_work_space}")
+                            except Exception as e:
+                                print(f"⚠️ 同步工作空间路径失败: {e}")
+                            
+                            # 从 path_manager 获取最新的 QML 输出目录
+                            qml_output_dir = pm.qml_output_dir
+                            print(f"✅ 从 path_manager 获取 QML 输出目录: {qml_output_dir}")
+                            
+                            # 检查是否有多个.qml文件
+                            if qml_output_dir and os.path.exists(qml_output_dir):
+                                try:
                                     qml_files = [f for f in os.listdir(qml_output_dir) if f.endswith('.qml')]
                                     if len(qml_files) > 1:
-                                        print(f"警告: {qml_output_dir}下有多个.qml文件，可能会有冲突")
-                                        pring(f"Warning: {qml_output_dir} has multiple .qml files, may cause conflicts")
-                            except:
-                                pass
-                            
-                            # 回退到默认路径
-                            if not qml_output_dir:
-                                qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                                        print(f"⚠️ 警告: {qml_output_dir}下有多个.qml文件({len(qml_files)}个)，可能会有冲突")
+                                        print(f"   QML files: {', '.join(qml_files)}")
+                                except Exception as e:
+                                    print(f"⚠️ 检查QML文件失败: {e}")
                             
                             # 尝试使用BASE_DIR作为base URL
                             base_dir = getattr(balsam_gltf_converter, 'BASE_DIR', None)
@@ -263,34 +271,28 @@ Window {{
                     
                     print(f"currentWorkDirection:{os.getcwd()}")
                     
-                    # 添加路径调试信息
+                    # 添加路径调试信息（统一使用 path_manager）
                     if BALSAM_AVAILABLE:
                         try:
-                            # 优先使用工作空间路径
-                            qml_output_dir = None
-                            try:
-                                import bpy
-                                scene = bpy.context.scene
-                                work_space = getattr(scene, 'work_space_path', None)
-                                if work_space:
-                                    qml_output_dir = work_space
-                            except:
-                                pass
-                            
-                            # 回退到默认路径
-                            if not qml_output_dir:
-                                qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
+                            # 从 path_manager 获取 QML 输出目录
+                            pm = path_manager.get_path_manager()
+                            qml_output_dir = pm.qml_output_dir
                             
                             # 调试信息：检查QML输出目录
-                            try:
-                                if not qml_output_dir:
-                                    qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
-                                
-                                print(f"🔍 QML路径信息:")
-                                print(f"  QML输出目录: {qml_output_dir}")
-                                print(f"  QML目录存在: {'✅' if os.path.exists(qml_output_dir) else '❌'}")
-                            except Exception as e:
-                                print(f"⚠️ 路径调试失败: {e}")
+                            print(f"🔍 QML路径信息 (from path_manager):")
+                            print(f"  工作空间路径: {pm.work_space_path or '(未设置)'}")
+                            print(f"  QML输出目录: {qml_output_dir}")
+                            print(f"  QML目录存在: {'✅' if os.path.exists(qml_output_dir) else '❌'}")
+                            
+                            # 如果目录存在，列出QML文件
+                            if os.path.exists(qml_output_dir):
+                                try:
+                                    qml_files = [f for f in os.listdir(qml_output_dir) if f.endswith('.qml')]
+                                    print(f"  QML文件数量: {len(qml_files)}")
+                                    if qml_files:
+                                        print(f"  QML文件列表: {', '.join(qml_files)}")
+                                except Exception as e:
+                                    print(f"  ⚠️ 列出QML文件失败: {e}")
                         except Exception as e:
                             print(f"⚠️ 路径调试失败: {e}")
                     

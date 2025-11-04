@@ -63,31 +63,43 @@ class QMLHandler:
             print("INFO: 启用简化日志模式")
         
     def setup_environment(self):
-        """设置环境，获取QML输出目录"""
+        """设置环境，获取QML输出目录（统一从 path_manager 获取）"""
         try:
-            # 优先使用工作空间路径
-            if BLENDER_AVAILABLE:
-                scene = bpy.context.scene
-                work_space = getattr(scene, 'work_space_path', None)
-                if work_space:
-                    self.qml_output_dir = work_space
-                    print(f"✅ 使用工作空间路径: {self.qml_output_dir}")
-                    return True
+            # 统一从 path_manager 获取工作空间路径
+            from . import path_manager
+            pm = path_manager.get_path_manager()
             
-            # 导入balsam转换器模块以获取全局路径
-            from . import balsam_gltf_converter
-            self.qml_output_dir = balsam_gltf_converter.get_qml_output_dir()
-            print(f"✅ QML输出目录设置成功: {self.qml_output_dir}")
+            # 确保 path_manager 已同步场景属性中的工作空间路径
+            if BLENDER_AVAILABLE:
+                try:
+                    scene = bpy.context.scene
+                    scene_work_space = getattr(scene, 'work_space_path', None)
+                    if scene_work_space and scene_work_space != pm.work_space_path:
+                        # 同步场景属性到 path_manager
+                        pm.set_work_space(scene_work_space)
+                        print(f"🔄 QMLHandler: 已同步工作空间路径到 path_manager: {scene_work_space}")
+                except Exception as e:
+                    print(f"⚠️ QMLHandler: 同步工作空间路径失败: {e}")
+            
+            # 从 path_manager 获取最新的 QML 输出目录
+            self.qml_output_dir = pm.qml_output_dir
+            print(f"✅ QMLHandler: 从 path_manager 获取 QML输出目录: {self.qml_output_dir}")
+            
+            # 确保目录存在
+            if self.qml_output_dir and not os.path.exists(self.qml_output_dir):
+                os.makedirs(self.qml_output_dir, exist_ok=True)
+                print(f"📁 QMLHandler: 已创建 QML输出目录: {self.qml_output_dir}")
+            
             return True
         except ImportError as e:
-            print(f"❌ 无法导入balsam转换器: {e}")
+            print(f"❌ QMLHandler: 无法导入 path_manager: {e}")
             # 回退到本地路径
             addon_dir = os.path.dirname(os.path.abspath(__file__))
             self.qml_output_dir = os.path.join(addon_dir, "output")
-            print(f"⚠️ 使用本地QML输出目录: {self.qml_output_dir}")
+            print(f"⚠️ QMLHandler: 使用本地QML输出目录: {self.qml_output_dir}")
             return False
         except Exception as e:
-            print(f"❌ 设置环境失败: {e}")
+            print(f"❌ QMLHandler: 设置环境失败: {e}")
             return False
     
     def find_qml_files(self):

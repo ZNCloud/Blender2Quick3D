@@ -604,6 +604,7 @@ class VIEW3D_PT_qt_quick3d_panel(Panel):
         # 搜索按钮
         row = layout.row()
         row.operator("qt_quick3d.search_local_balsam", text="Search Local Balsam", icon='VIEWZOOM')
+        row.operator("qt_quick3d.add_balsam_path", text="Add Balsam Path", icon='FILE_FOLDER')
 
         # 确保场景有balsam_version属性，否则显示默认
         if not hasattr(scene, "balsam_version"):
@@ -1507,6 +1508,42 @@ class QT_QUICK3D_OT_search_local_balsam(Operator):
         
         return {'FINISHED'}
 
+class QT_QUICK3D_OT_add_balsam_path(Operator):
+    """手动添加 balsam 可执行路径并写入枚举/缓存"""
+    bl_idname = "qt_quick3d.add_balsam_path"
+    bl_label = "Add Balsam Path"
+    bl_description = "Pick a balsam.exe and add it to versions list"
+
+    filepath: StringProperty(subtype='FILE_PATH', default="")
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        try:
+            path = self.filepath
+            if not path:
+                self.report({'WARNING'}, "No file selected")
+                return {'CANCELLED'}
+
+            key = path_manager.add_balsam_path(path)
+
+            # 强制刷新枚举并选择刚添加的项
+            if hasattr(context.scene, 'balsam_version'):
+                context.scene.balsam_version = key
+
+            # 刷新界面
+            for area in context.screen.areas:
+                area.tag_redraw()
+
+            self.report({'INFO'}, f"Added balsam: {key}")
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to add: {str(e)}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
 class QT_QUICK3D_OT_balsam_convert_existing(Operator):
     """Convert existing GLTF file"""
     bl_idname = "qt_quick3d.balsam_convert_existing"
@@ -1690,6 +1727,7 @@ classes = [
     QT_QUICK3D_OT_set_qmlproject_path,  # 保留以防止旧代码引用错误（已弃用）
     QT_QUICK3D_OT_set_workspace_from_asset,
     QT_QUICK3D_OT_search_local_balsam,
+    QT_QUICK3D_OT_add_balsam_path,
 ]
 
 # 不再需要单独的Balsam UI面板

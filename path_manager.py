@@ -31,13 +31,15 @@ class PathManager:
     
     @property
     def work_space_path(self) -> Optional[str]:
-        """获取工作空间路径"""
-        if self._work_space_path is None:
-            try:
-                scene = bpy.context.scene
-                self._work_space_path = getattr(scene, 'work_space_path', None)
-            except Exception:
-                pass
+        """获取工作空间路径（每次都从场景属性同步最新值）"""
+        try:
+            # 每次都从场景属性读取最新值
+            scene = bpy.context.scene
+            scene_work_space = getattr(scene, 'work_space_path', None)
+            if scene_work_space:
+                self._work_space_path = scene_work_space
+        except Exception:
+            pass
         return self._work_space_path
     
     @work_space_path.setter
@@ -53,18 +55,20 @@ class PathManager:
     
     @property
     def output_base_dir(self) -> str:
-        """获取输出基础目录"""
-        if self._output_base_dir is None:
-            # 优先使用工作空间路径
-            if self.work_space_path:
-                self._output_base_dir = self.work_space_path
-            else:
-                # 使用默认输出目录
-                self._output_base_dir = os.path.join(self.addon_dir, "output")
+        """获取输出基础目录（动态根据工作空间路径更新）"""
+        # 优先使用工作空间路径（实时获取）
+        if self.work_space_path:
+            output_dir = self.work_space_path
+        elif self._output_base_dir:
+            # 使用已设置的输出目录
+            output_dir = self._output_base_dir
+        else:
+            # 使用默认输出目录
+            output_dir = os.path.join(self.addon_dir, "output")
         
         # 确保目录存在
-        os.makedirs(self._output_base_dir, exist_ok=True)
-        return self._output_base_dir
+        os.makedirs(output_dir, exist_ok=True)
+        return output_dir
     
     @output_base_dir.setter
     def output_base_dir(self, value: str):
@@ -74,11 +78,14 @@ class PathManager:
     
     @property
     def qml_output_dir(self) -> str:
-        """获取QML输出目录"""
-        if self._qml_output_dir is None:
-            # QML输出目录与基础输出目录相同
-            self._qml_output_dir = self.output_base_dir
-        return self._qml_output_dir
+        """获取QML输出目录（动态根据工作空间路径更新）"""
+        # QML输出目录与基础输出目录相同（实时获取）
+        if self._qml_output_dir and not self.work_space_path:
+            # 如果设置了自定义QML输出目录且没有工作空间路径，使用自定义的
+            return self._qml_output_dir
+        else:
+            # 否则使用基础输出目录
+            return self.output_base_dir
     
     @qml_output_dir.setter
     def qml_output_dir(self, value: str):
@@ -304,6 +311,70 @@ def load_balsam_cache():
         print(f"❌ 加载balsam缓存失败: {e}")
         BALSAM_CACHE_LOADED = True
         return False
+
+def _generate_balsam_key_for_path(path: str) -> str:
+    """生成用于 BALSAM_PATH_MAP 的 key：
+    - 优先使用解析的 "版本-编译器" 作为基础 key；
+    - 若该 key 已存在且映射到同一路径，则复用；
+    - 若该 key 与不同路径冲突，则回退为唯一的 "UserDef_<n>"；
+    - 若解析失败则同样回退。
+    """
+    # 若路径已存在于映射，直接返回原有 key（避免重复条目）
+    for k, v in BALSAM_PATH_MAP.items():
+        try:
+            if os.path.abspath(v) == os.path.abspath(path):
+                return k
+        except Exception:
+            continue
+
+    def _alloc_userdef_key() -> str:
+        idx = 1
+        while True:
+            candidate = f"UserDef_{idx}"
+            if candidate not in BALSAM_PATH_MAP:
+                return candidate
+            idx += 1
+
+    try:
+        qt_version, compiler = _parse_balsam_path_info(path)
+        if qt_version != "Unknown":
+            base_key = f"{qt_version}-{compiler}"
+            if base_key not in BALSAM_PATH_MAP:
+                return base_key
+            # 冲突但映射到同一路径的情况已在前面处理，这里代表冲突于不同路径
+            return _alloc_userdef_key()
+        else:
+            return _alloc_userdef_key()
+    except Exception:
+        return _alloc_userdef_key()
+
+def add_balsam_path(path: str) -> str:
+    """将指定的balsam路径加入缓存映射并保存，返回其key。
+
+    - 规范化路径
+    - 校验文件存在
+    - 生成稳定key
+    - 更新 BALSAM_PATH_MAP 并保存到缓存文件
+    """
+    global BALSAM_PATH_MAP, BALSAM_CACHE_LOADED
+    if not path:
+        raise ValueError("空路径")
+    abs_path = os.path.abspath(path)
+    if not os.path.exists(abs_path):
+        raise FileNotFoundError(f"路径不存在: {abs_path}")
+    # 可执行名宽松校验：允许非严格 'balsam.exe'，但优先提示
+    file_name = os.path.basename(abs_path).lower()
+    if not file_name.endswith("balsam.exe") and not file_name.startswith("balsam"):
+        print(f"⚠️ 添加的文件看起来不是balsam: {abs_path}")
+
+    # 确保缓存已加载
+    if not BALSAM_CACHE_LOADED:
+        load_balsam_cache()
+
+    key = _generate_balsam_key_for_path(abs_path)
+    BALSAM_PATH_MAP[key] = abs_path
+    save_balsam_cache()
+    return key
 
 def save_balsam_cache():
     """保存balsam路径映射到缓存文件"""
