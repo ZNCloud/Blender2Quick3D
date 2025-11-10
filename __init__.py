@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Qt6.9 Quick3D Engine",
     "author": "Zhining_Jiao",
-    "version": (1, 0, 0),
+    "version": (0, 0, 1),
     "blender": (4, 1, 0),
     "location": "View3D > Sidebar > Qt6.9 Quick3D",
-    "description": "Integrate Qt6.9 Quick3D engine into Blender as a render engine",
+    "description": "Integrate Qt6.9 Quick3D engine into Blender",
     "warning": "",
     "doc_url": "",
     "category": "3D View",

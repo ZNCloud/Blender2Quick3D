@@ -2,12 +2,14 @@
 
 ## 概述
 
-我本质上想要做一个能很好集成在blender中的内置引擎，如同EEVEE和CYCLES那样。但目前时间较紧，只实现了出gltf到qml并启quick3d窗口的功能。实际上这是一个非常低效的做法。当需要频繁更改大场景时，会对读写产生很大压力。
+Blender2Quick3D 将 Qt Quick3D (Qt 6.9) 工具链整合进 Blender，帮助你把场景快速导出为 QML，并在外部 Qt 窗口中进行交互预览。当前版本聚焦在自动化导出流程、Balsam 转换集成、PySide6 依赖管理以及场景环境配置，不再尝试注册完整的 Blender 渲染引擎。
 
-等我看懂balsam和blender的数据传输逻辑我再考虑做实时通信。现在这个ppt可以凑活看了。至少比在creator里来回调舒服多了。
-
+我本质上想要做一个能很好集成在blender中的内置引擎，如同EEVEE和CYCLES那样。但目前时间较紧，只实现了出gltf到qml并启quick3d窗口的功能。实
+际上这是一个非常低效的做法。当需要频繁更改大场景时，会对读写产生很大压力。
+等我看懂balsam和blender的数据传输逻辑我再考虑做实时通信。现在至少比在creator里来回调舒服多了。
 addimportpath有bug，总是少一级目录
 
+视频教程介绍：https://youtu.be/P_MgBGx-gKo?si=yZgpe6ZUGS6WNVb2
 
 Phase1：
 ~~TODO：窗口数据，view3d尚未同步~~
@@ -23,126 +25,71 @@ TODO：整理依赖和环境
 Phase3：
 TODO: 选择性转换资产
 TODO：实时通信，实时渲染
+## 功能亮点
 
-
-## 核心功能
-
-### 1. Qt Quick3D 渲染引擎（开发中，功能上不完善）
-- 将 Qt Quick3D 注册为 Blender 的渲染引擎
-- 支持实时 3D 渲染和预览
-- 集成 Blender 的材质节点系统
-- 支持光照、纹理和材质节点
-
-### 2. GLTF 到 QML 转换
-- 使用 Balsam 转换器将 Blender 场景导出为 GLTF 格式
-- 自动转换为 QML 文件，包含完整的 3D 场景数据
-- 支持网格、材质、纹理和动画数据以及IBL
-- 生成可直接在 Qt Quick3D 中使用的 QML 文件
-
-### 3. Quick3D 窗口集成
-- 在 Blender 中直接打开 Qt Quick3D 窗口
-- 实时预览转换后的 3D 场景
-- 支持场景交互和实时渲染
-- 集成 PySide6 环境管理
-
-### 4. 自动依赖管理
-- 自动检测和安装 PySide6 依赖
-- 本地依赖管理，避免系统级安装冲突
-- 智能环境变量设置
-- 自动重启 Blender 完成安装
-
+- **PySide6 依赖管理**：启动时检测系统 PySide6，支持在插件偏好设置中查看/切换安装位置，亦可直接调用 pip 安装并提示重启。
+- **Quick3D 预览窗口**：`View3D > Sidebar > Qt6.9 Quick3D` 面板中可一键打开外部 Quick3D 窗口，使用 WASD 与鼠标交互。
+- **Balsam 转换工作流**：内置 GLTF→QML 全流程，包括导出、调用 `balsam.exe`、打开输出目录、清理旧文件、保存源场景等操作。
+- **工作空间与 QMLProject 支持**：自动识别 `.qmlproject`，同步 `Generated/QtQuick3D` 资产目录，可在枚举中选择资产文件夹并自动切换工作空间。
+- **SceneEnvironment 配置**：暴露大量 Qt Quick3D 环境参数（抗锯齿、AO、背景、色彩调整、景深、Glow、Lens Flare、LUT、暗角等），以及自定义 WASD 控制器设置。
+- **IBL 资源复制**：在转换前自动拷贝 World 中连接的环境贴图到输出目录，确保 QML 项目使用正确的 IBL 资产。
+- **调试工具**：提供 QML 调试模式切换、IBL 复制测试、查看/刷新工作空间、快速保存源场景、弹出工作空间文件夹等实用命令。
 
 ## 🛠️ 安装要求
 
-### 系统要求
-- **Blender**: 4.1 或更高版本
-- **Python**: 3.10+ (Blender 内置)
-- **操作系统**: Windows 10 （其他的未测试）
+- **Blender**：4.1 或更高版本（内置 Python 3.10）
+- **操作系统**：Windows 10（其他平台暂未验证）
+- **依赖**：
+  - 系统级 **PySide6**（Qt 6.9）
+  - Qt 附带的 **balsam.exe**（例如位于 `C:\Qt\6.9.2\mingw_64\bin\balsam.exe`）
+  - 或者自己安装的Qt。但要保证有balsam.exe转换器
 
-### 依赖项
-- **PySide6**: Qt6.9 的 Python 绑定
-- **Balsam**: GLTF 到 QML 转换工具
+## 📦 安装与启用
 
-## 📦 安装步骤
+1. 将插件文件夹放入 Blender 的 addons 目录。
+2. 在 `编辑 > 偏好设置 > 插件` 中搜索 `Qt6.9 Quick3D Engine` 并启用。
+3. 打开插件条目可查看 PySide6 状态，如需要可点击 `Install PySide6` 使用 Blender Python 安装。
+4. 若刚刚安装 PySide6，按照提示重启 Blender。
 
-### 1. 下载插件
-- 下载 Blender2Quick3D 插件压缩包
-- 解压到 Blender 的插件目录
+## 🎯 使用指南
 
-### 2. 启用插件
-- 在 Blender 中打开 `编辑 > 偏好设置 > 插件`
-- 搜索 "Qt6.9 Quick3D Engine"
-- 勾选启用插件
+### 1. 准备依赖
+- 在插件偏好设置中点击 `Show PySide6 Info` 获取当前 PySide6 安装位置。
+- 使用 `Search Local Balsam` 自动扫描 `C:/Qt` 下的 `balsam.exe`，或通过 `Add Balsam Path` 手动指定。
 
-### 3. 安装依赖
-- 插件会自动检测 PySide6 是否可用
-- 如果未安装，点击 "Install PySide6" 按钮
-- 安装完成后重启 Blender
+### 2. 设置工作空间
+- 在 `Qt6.9 Quick3D` 面板点击 `Set Work Space` 选择输出目录。
+- 如果目录中存在 `.qmlproject`，插件会自动切换到 QMLProject 模式并列出资产文件夹；更改下拉框会同步 Blender 场景的工作空间路径。
 
-## 🎯 使用方法
+### 3. 导出与转换
+- 点击 `Convert Scene to QML` 完成 GLTF 导出与 Balsam 转换，IBL 贴图会被一并复制到输出目录。
+- 需要复用已有 GLTF 时，可使用 `Convert Existing GLTF` 并手动指定文件。
+- 通过 `Open Output Folder / Open GLTF Folder / Open QML Folder` 快速定位导出结果。
 
-### 基本操作
+### 4. 场景调优
+- 展开 `SceneSettings` 自定义 Quick3D 视口大小、SceneEnvironment 基础参数及扩展效果。
+- 启用 WASD 控制器可调整各方向速度、鼠标灵敏度以及按键映射，增强 Quick3D 窗口交互体验。
 
+### 5. 调试与维护
+- `Debug Options` 中可以开启 QML 调试模式、测试 IBL 复制、同步工作空间、保存源场景等。
+- 在windows中，通过toggle qml debug mode按钮开启qml调试，再点击open quick3d window即可在 “windows-toggle system console”中看到完整的qml文件
 
-#### 1.转换场景到 QML
-- 在渲染属性面板中找到 "QML Functions" 部分
-- 点击 "Convert Scene to QML" 按钮
-- 插件会自动导出 GLTF 并转换为 QML
+## ❓ 常见问题
 
-#### 2. 打开 Quick3D 窗口
-- 点击 "Open Quick3D Window" 按钮
-- 新窗口将显示转换后的 3D 场景
-- 支持使用键盘wasd实时交互和渲染
-
-#### 3.如果需要，可以自定义sceneEnvironment
-
-
-### 常见问题
-
-#### 1. PySide6 安装失败
-- 确保网络连接正常
-- 检查 Blender 的 Python 版本
-- 尝试手动安装 PySide6
-- 重启 Blender 后重试
-
-#### 2. 转换失败
-- 检查场景是否包含有效的 3D 对象
-- 确保材质设置正确
-- 检查输出目录权限
-- 查看控制台错误信息
-
-#### 3. Quick3D 窗口无法打开
-- 确认 PySide6 已正确安装
-- 检查 Qt 环境变量设置
-- 重启 Blender 后重试
-- 查看系统兼容性
-
-### 调试信息
-- 启用 Blender 的系统控制台
-- 查看插件输出的日志信息
-- 检查文件路径和权限
-- 验证依赖库版本
+- **PySide6 未检测到**：确认系统已安装 PySide6；必要时通过插件提供的安装按钮完成安装并重启 Blender。
+- **Balsam 枚举为空**：检查 `C:/Qt` 是否存在 Qt Design Studio；可手动添加 `balsam.exe`。
+- **转换失败**：查看系统控制台输出，确认 GLTF 导出成功且输出目录有写权限。
+- **Quick3D 窗口无法启动**：确认 PySide6 可导入、`qt_quick3d_integration_pyside6.py` 存在且依赖满足。
 
 ## 🔄 更新日志
 
-### 版本 1.0.0
-- 初始版本发布
-- 支持 Qt6.9 Quick3D 引擎
-- 集成 Balsam GLTF 转换器
+### 版本 0.0.1
+- 初始版本，提供 Quick3D 窗口启动、GLTF→QML 转换与依赖管理等功能。
 
 ## 👨‍💻 作者
 
-**ZhiningJiao** - 主要开发者
-
-
-## 📞 支持
-
-如果您需要帮助或有任何问题：
-
-- 提交 GitHub Issue
-- 查看项目 Wiki
-- 联系我 zhining.jiao@qt.io
+**ZhiningJiao**（zhining.jiao@qt.io）
 
 ---
 
-**注意**: 这是一个实验性插件，某些功能可能不稳定。建议在重要项目中使用前充分测试。
+> ⚠️ 本插件仍处于实验阶段，建议在关键项目中使用前进行充分验证。

@@ -2,145 +2,98 @@
 
 ## Overview
 
-I essentially want to create a built-in engine that integrates well into Blender, like EEVEE and CYCLES. However, due to time constraints, I've only implemented the functionality to export GLTF to QML and launch a Quick3D window. This is actually a very inefficient approach. When frequent changes to large scenes are needed, it puts significant pressure on read/write operations.
+Blender2Quick3D integrates the Qt Quick3D (Qt 6.9) toolchain into Blender. The addon streamlines the export pipeline to QML, launches a standalone Quick3D preview window, and provides helpers for managing PySide6, Balsam, workspaces, and scene environment settings. A custom Blender render engine is no longer part of this release; the focus is on authoring assets in Blender and iterating quickly inside Qt.
 
-I'll consider implementing real-time communication once I understand the data transmission logic between Balsam and Blender. For now, this PPT can work for viewing. At least it's much more comfortable than constantly switching back and forth in Creator.
+The long-term ambition is still to deliver a render engine that feels as native as EEVEE or Cycles. For now, only the GLTF → QML export flow and Quick3D window launcher are implemented. This approach is inefficient for large scenes because of heavy disk I/O, but it already makes presentation-style demos far easier than hopping between Blender and Qt Creator. There is also a known `addimportpath` issue that drops one directory level.
 
-There's a bug with addimportpath - it always misses one directory level.
+▶ Video walkthrough: https://youtu.be/P_MgBGx-gKo?si=yZgpe6ZUGS6WNVb2
 
-## Development Phases
+### Roadmap
 
-**Phase 1:**
-- ~~TODO: Window data, view3d not yet synchronized~~
-- ~~TODO: Export settings, sceneEnvironment cannot be set yet~~
-- ~~TODO: Specify working directory, generate GLTF and QML~~
-- ~~TODO: IBL conversion logic not yet implemented~~
+**Phase 1**
+- ~~Window data syncing with View3D~~
+- ~~SceneEnvironment export settings~~
+- ~~Workspace selection for GLTF/QML generation~~
+- ~~IBL transfer logic~~
 
-**Phase 2:**
-- TODO: Texture baking
-- TODO: Add controllers for four doors and two covers, generate QML, pass to QQmlApplicationEngine
-- TODO: Organize architecture, further decoupling
-- TODO: Auto-generate CMake
-- TODO: Organize dependencies and environment
+**Phase 2**
+- Texture baking
+- Add vehicle-style controllers (four doors, two covers), generate QML, pass to `QQmlApplicationEngine`
+- Refactor architecture for better decoupling
+- Auto-generate CMake
+- Streamline dependency/environment setup
 
-**Phase 3:**
-- TODO: Selective asset conversion
-- TODO: Real-time communication, real-time rendering
+**Phase 3**
+- Selective asset conversion
+- Real-time communication and rendering
 
-## Core Features
+## Feature Highlights
 
-### 1. Qt Quick3D Rendering Engine (In Development, Functionally Incomplete)
-- Register Qt Quick3D as a Blender rendering engine
-- Support real-time 3D rendering and preview
-- Integrate with Blender's material node system
-- Support lighting, textures, and material nodes
+- **PySide6 dependency management**: Detect system-wide PySide6 on startup, inspect all discovered installations, switch between them, or trigger a pip installation directly from the addon preferences with restart guidance.
+- **Quick3D preview window**: Launch the external Quick3D UI from `View3D > Sidebar > Qt6.9 Quick3D`, navigate with WASD + mouse, and validate exported content interactively.
+- **Balsam conversion workflow**: Run the full GLTF → QML pipeline with one click, open target folders, clean outdated output, and save source assets alongside the generated files.
+- **Workspace & QMLProject integration**: Auto-detect `.qmlproject` files, map available asset folders under `Generated/QtQuick3D`, and keep Blender’s workspace path synchronized with the chosen folder.
+- **SceneEnvironment controls**: Expose extensive Qt Quick3D environment options (AA, AO, background, tonemapping, color adjustments, DOF, glow, lens flare, LUT, vignette, OIT, etc.) plus configurable WASD controller parameters.
+- **IBL asset handling**: Copy all World-linked images into the Balsam output prior to conversion so the QML project references the correct HDR textures.
+- **Debug helpers**: Toggle QML debug verbosity, test IBL copying, refresh workspaces, save source scenes, and open the active workspace folder straight from Blender.
 
-### 2. GLTF to QML Conversion
-- Use Balsam converter to export Blender scenes to GLTF format
-- Automatically convert to QML files containing complete 3D scene data
-- Support mesh, material, texture, and animation data as well as IBL
-- Generate QML files that can be used directly in Qt Quick3D
+## 🛠️ Requirements
 
-### 3. Quick3D Window Integration
-- Open Qt Quick3D window directly within Blender
-- Real-time preview of converted 3D scenes
-- Support scene interaction and real-time rendering
-- Integrated PySide6 environment management
+- **Blender**: 4.1 or newer (ships with Python 3.10)
+- **Operating System**: Windows 10 (other platforms untested)
+- **Dependencies**:
+  - System-level **PySide6** for Qt 6.9
+- **balsam.exe** shipped with Qt (for example `C:\Qt\6.9.2\mingw_64\bin\balsam.exe`)
+- Any custom Qt installation works as long as it contains `balsam.exe`
 
-### 4. Automatic Dependency Management
-- Automatically detect and install PySide6 dependencies
-- Local dependency management to avoid system-level installation conflicts
-- Smart environment variable setup
-- Automatic Blender restart to complete installation
+## 📦 Installation & Activation
 
-## 🛠️ Installation Requirements
+1. Copy the addon folder into Blender’s addons directory.
+2. Enable `Qt6.9 Quick3D Engine` via `Edit > Preferences > Add-ons`.
+3. In the addon preferences, inspect the PySide6 status; install via `Install PySide6` if required.
+4. Restart Blender after installing PySide6 or switching Python environments.
 
-### System Requirements
-- **Blender**: Version 4.1 or higher
-- **Python**: 3.10+ (Built-in with Blender)
-- **Operating System**: Windows 10 (Others not tested)
+## 🎯 Getting Started
 
-### Dependencies
-- **PySide6**: Python bindings for Qt6.9
-- **Balsam**: GLTF to QML conversion tool
+### 1. Prepare Dependencies
+- Use `Show PySide6 Info` in addon preferences to confirm available installations.
+- Click `Search Local Balsam` to scan `C:/Qt` for `balsam.exe`, or add a path manually with `Add Balsam Path`.
 
-## 📦 Installation Steps
+### 2. Configure Workspace
+- Choose a workspace directory with `Set Work Space`.
+- If a `.qmlproject` is found, the addon enters QMLProject mode, caches asset folders, and updates the workspace automatically when you pick a folder from the dropdown.
 
-### 1. Download Plugin
-- Download the Blender2Quick3D plugin package
-- Extract to Blender's addon directory
+### 3. Convert Scenes
+- Hit `Convert Scene to QML` to export GLTF, copy IBL assets, and run Balsam.
+- Use `Convert Existing GLTF` when re-processing a pre-exported file.
+- Access results via `Open Output Folder`, `Open GLTF Folder`, or `Open QML Folder`, and clean up with `Clean Output Files`.
 
-### 2. Enable Plugin
-- In Blender, open `Edit > Preferences > Add-ons`
-- Search for "Qt6.9 Quick3D Engine"
-- Check to enable the plugin
+### 4. Tune the Scene
+- Expand `SceneSettings` to tweak Quick3D viewport dimensions and SceneEnvironment parameters.
+- Enable and tune the WASD controller (base speeds, per-direction overrides, mouse sensitivity, key mapping) to match your interaction needs.
 
-### 3. Install Dependencies
-- The plugin will automatically detect if PySide6 is available
-- If not installed, click the "Install PySide6" button
-- Restart Blender after installation is complete
+### 5. Debug & Maintenance
+- Toggle QML debug mode, run the IBL copy test, refresh the workspace from the selected asset folder, or save the current source scene (GLTF + blend) using the provided operators.
+- On Windows, toggle QML debug mode and reopen the Quick3D window to stream the full QML output in *Window → Toggle System Console* (the Blender system console).
+- Restart Blender after significant dependency changes to refresh PySide6 modules.
 
-## 🎯 Usage
+## ❓ Troubleshooting
 
-### Basic Operations
-
-#### 1. Convert Scene to QML
-- Find the "QML Functions" section in the render properties panel
-- Click the "Convert Scene to QML" button
-- The plugin will automatically export GLTF and convert to QML
-
-#### 2. Open Quick3D Window
-- Click the "Open Quick3D Window" button
-- A new window will display the converted 3D scene
-- Supports real-time interaction and rendering using WASD keys
-
-#### 3. Customize sceneEnvironment (if needed)
-
-### Common Issues
-
-#### 1. PySide6 Installation Failed
-- Ensure network connection is stable
-- Check Blender's Python version
-- Try manually installing PySide6
-- Restart Blender and retry
-
-#### 2. Conversion Failed
-- Check if the scene contains valid 3D objects
-- Ensure material settings are correct
-- Check output directory permissions
-- View console error messages
-
-#### 3. Quick3D Window Won't Open
-- Confirm PySide6 is properly installed
-- Check Qt environment variable settings
-- Restart Blender and retry
-- Check system compatibility
-
-### Debug Information
-- Enable Blender's system console
-- View plugin output log information
-- Check file paths and permissions
-- Verify dependency library versions
+- **PySide6 not found**: Ensure PySide6 is installed system-wide; reinstall via the addon and restart Blender.
+- **No Balsam options**: Verify Qt Design Studio is installed under `C:/Qt`, or register `balsam.exe` manually.
+- **Conversion errors**: Check the system console for details, confirm GLTF export succeeded, and ensure the output directory is writable.
+- **Quick3D window fails to open**: Validate that PySide6 imports correctly and that `qt_quick3d_integration_pyside6.py` and its resources are present.
 
 ## 🔄 Changelog
 
-### Version 1.0.0
-- Initial version release
-- Support for Qt6.9 Quick3D engine
-- Integrated Balsam GLTF converter
+### Version 0.0.1
+- Initial public release with Quick3D preview window, GLTF → QML automation, dependency helpers, and SceneEnvironment controls.
 
 ## 👨‍💻 Author
 
-**ZhiningJiao** - Main Developer
-
-## 📞 Support
-
-If you need help or have any questions:
-
-- Submit a GitHub Issue
-- Check the project Wiki
-- Contact me at zhining.jiao@qt.io
+**ZhiningJiao** – zhining.jiao@qt.io
 
 ---
 
-**Note**: This is an experimental plugin, some features may be unstable. Please test thoroughly before using in important projects.
+> **Note**  
+> Blender2Quick3D is experimental. Test thoroughly before using it in production-critical projects.
